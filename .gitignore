@@ -210,3 +210,4 @@ __marimo__/
 *.cfg
 bin/*
 .lock
+public/*
