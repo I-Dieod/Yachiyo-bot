@@ -1,0 +1,74 @@
+# Git
+.git/
+.gitignore
+
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+.tox/
+.coverage
+.coverage.*
+.pytest_cache/
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+.pixi/
+bin/
+include/
+lib/
+lib64/
+pyvenv.cfg
+.lock
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Documentation
+README.md
+LICENSE
+docs/
+
+# Cache
+.cache/
+.ruff_cache/
+
+# Other
+.cursorignore
+.cursorindexingignore
