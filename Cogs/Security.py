@@ -7,7 +7,7 @@ mute_name_list = ["荒らし共栄圏", "荒らし", "共栄圏", "ワッパス�
 pattern1 = r"[\w-]{20,28}\.[\w-]{3,10}\.[\w-]{22,30}"
 pattern2 = r"mfa\.[\w-]{80,90}"
 pattern3 = r"[a-zA-Z0-9]{15}"
-log_ch = 1478490523592560681
+log_ch = 1478490523592560681  # 超かぐや姫！ファンサーバー server-log
 
 
 class Security(commands.Cog):
@@ -17,7 +17,7 @@ class Security(commands.Cog):
     @commands.Cog.listener()
     async def on_member_join(self, member):
         name = member.global_name or member.display_name
-        ch = self.bot.get_channel(log_ch)  # 超かぐや姫！ファンサーバー server-log
+        ch = self.bot.get_channel(log_ch)
         for target in mute_name_list:
             if target in name:
                 muteRole = member.guild.get_role(
