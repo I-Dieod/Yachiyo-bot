@@ -1,6 +1,8 @@
 import discord
 from discord.ext import commands
 
+log_ch = 1478490523592560681  # 超かぐや姫！ファンサーバー server-log
+
 
 class Event(commands.Cog):
     def __init__(self, bot: commands.Bot):
@@ -10,7 +12,7 @@ class Event(commands.Cog):
     async def on_ready(self):
         print(f"Logged in as {self.bot.user.name} ({self.bot.user.id})")
         print("Bot is ready!")
-        ch = self.bot.get_channel(874294006895493123)  # Lunar-Project log
+        ch = self.bot.get_channel(log_ch)
         if ch:
             await ch.send("Bot is ready and running!")
 
