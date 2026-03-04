@@ -9,6 +9,7 @@ from google import genai
 from google.genai import types
 
 client = genai.Client()
+ch_work1 = 1477312385046810807  # 作業部屋1聞き専
 
 
 def load_system_prompt():
@@ -58,7 +59,7 @@ class Talk(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self.message_buffer = []
-        self.target_channel_id = 874294006895493123  # 監視対象チャンネルID
+        self.target_channel_id = ch_work1  # 監視対象チャンネルID
         self.next_message_count = self._get_random_message_count()
         self.current_message_count = 0
         self.system_instruction = load_system_prompt()  # 動的にロード
