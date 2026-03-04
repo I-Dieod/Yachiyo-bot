@@ -14,6 +14,14 @@ class Event(commands.Cog):
         if ch:
             await ch.send("Bot is ready and running!")
 
+    @commands.command()
+    async def ping(self, ctx):
+        ch = self.bot.get_channel(
+            1478486927077277777
+        )  # 超かぐや姫！ファンサーバー bot-コマンド
+        if ch:
+            await ch.send("pong")
+
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(Event(bot))
