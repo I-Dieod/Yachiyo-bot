@@ -16,7 +16,7 @@ token = os.getenv("BOT_TOKEN")
 
 INITIAL_EXTENSIONS = [
     "Cogs.Events",
-    "Cogs.Talk",
+    "Cogs.Security",
 ]
 
 
