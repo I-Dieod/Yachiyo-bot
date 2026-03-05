@@ -12,6 +12,7 @@ from google.genai import types
 
 client = genai.Client()
 ch_work1 = 1477312385046810807  # 作業部屋1聞き専
+ch_room = 1478915638268395562  # やちよのお部屋
 ch_esc = 874294006895493123
 
 
@@ -62,7 +63,7 @@ class Talk(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self.message_buffer = []
-        self.target_channel_id = ch_esc  # 監視対象チャンネルID
+        self.target_channel_id = ch_room  # 監視対象チャンネルID
         self.next_message_count = self._get_random_message_count()
         self.current_message_count = 0
         self.system_instruction = load_system_prompt()  # 動的にロード
