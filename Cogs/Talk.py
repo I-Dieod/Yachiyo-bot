@@ -1,10 +1,12 @@
 import asyncio
+import json
 import random
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import discord
 from discord import app_commands
-from discord.ext import commands
+from discord.ext import commands, tasks
 from google import genai
 from google.genai import types
 
@@ -64,6 +66,13 @@ class Talk(commands.Cog):
         self.next_message_count = self._get_random_message_count()
         self.current_message_count = 0
         self.system_instruction = load_system_prompt()  # 動的にロード
+
+        # 高スコア管理関連の変数
+        self.monitoring_messages = {}  # {message_id: {"message": message_obj, "prev_msgs": [], "timestamp": datetime}}
+        self.high_score_file = (
+            Path(__file__).parent.parent / "data" / "highScore_res.json"
+        )
+        self.cleanup_monitoring.start()  # 5分間の監視タスクを開始
 
     @commands.command()
     async def reload_prompt(self, ctx: commands.Context) -> None:
@@ -221,6 +230,14 @@ class Talk(commands.Cog):
                 full_response = response.text
                 trc_msg.append(sent_msg.id)
 
+                # 送信したメッセージを5分間監視対象に追加
+                # AI応答生成時に使用されたバッファ範囲をそのまま保存
+                self.monitoring_messages[sent_msg.id] = {
+                    "message": sent_msg,
+                    "recent_messages": recent_messages.copy(),  # バッファ範囲をそのまま保存
+                    "timestamp": datetime.now(),
+                }
+
             # ボット自身のメッセージをバッファに追加（手動で追加、on_messageで重複処理を避けるため）
             # Note: on_messageリスナーで自動的に追加されるので、ここでの手動追加は不要
 
@@ -228,6 +245,109 @@ class Talk(commands.Cog):
             msg = random.choice(sys_error_messages)
             error_message = await channel.send(msg)
             print(f"Gemini error in auto response: {err}")
+
+    def load_high_scores(self):
+        """高スコアデータをファイルから読み込み"""
+        try:
+            if self.high_score_file.exists():
+                with open(self.high_score_file, "r", encoding="utf-8") as f:
+                    return json.load(f)
+            else:
+                return []
+        except Exception as e:
+            print(f"Error loading high scores: {e}")
+            return []
+
+    def save_high_scores(self, data):
+        """高スコアデータをファイルに保存"""
+        try:
+            # ディレクトリが存在しない場合は作成
+            self.high_score_file.parent.mkdir(parents=True, exist_ok=True)
+            with open(self.high_score_file, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            print(f"Error saving high scores: {e}")
+
+    @tasks.loop(minutes=1)
+    async def cleanup_monitoring(self):
+        """5分を超えたメッセージを監視リストから削除"""
+        current_time = datetime.now()
+        expired_ids = []
+
+        for msg_id, data in self.monitoring_messages.items():
+            if current_time - data["timestamp"] > timedelta(minutes=5):
+                expired_ids.append(msg_id)
+
+        for msg_id in expired_ids:
+            del self.monitoring_messages[msg_id]
+
+    @cleanup_monitoring.before_loop
+    async def before_cleanup_monitoring(self):
+        """ボットの準備完了を待つ"""
+        await self.bot.wait_until_ready()
+
+    def cog_unload(self):
+        """Cogがアンロードされる際の処理"""
+        self.cleanup_monitoring.cancel()
+
+    @commands.Cog.listener()
+    async def on_reaction_add(self, reaction, user):
+        msgId = reaction.message.id
+        emoji = reaction.emoji
+        count = reaction.count  # normal_count -> count に修正
+
+        if msgId in trc_msg and msgId in self.monitoring_messages:
+            # 絵文字のスコア（リアクション数）を取得
+            score = count
+            monitoring_data = self.monitoring_messages[msgId]
+
+            # 高スコアデータを準備
+            now = datetime.now()
+            time_str = now.strftime("%Y-%m-%d-%H-%M-%S")
+
+            # AI応答生成時に使用されたバッファ範囲からユーザーメッセージのみを抽出
+            prev_msgs = {}
+            user_messages = [
+                msg for msg in monitoring_data["recent_messages"] if not msg["is_bot"]
+            ]
+            for i, msg in enumerate(user_messages, 1):
+                prev_msgs[str(i)] = msg["content"]
+
+            new_entry = {
+                "time": time_str,
+                "prev_msgs": prev_msgs,
+                "res": monitoring_data["message"].content,
+                "Score": str(score),
+            }
+
+            # 既存の高スコアデータを読み込み
+            high_scores = self.load_high_scores()
+
+            # スコアが高い場合の処理
+            if len(high_scores) < 10:
+                # データが10個未満の場合は追加
+                high_scores.append(new_entry)
+                self.save_high_scores(high_scores)
+                print(f"New high score entry added: Score {score}")
+            else:
+                # 最低スコアを取得
+                min_score = min(int(entry["Score"]) for entry in high_scores)
+
+                if score > min_score:
+                    # 最低スコアのエントリを削除して新しいエントリを追加
+                    high_scores = [
+                        entry
+                        for entry in high_scores
+                        if int(entry["Score"]) != min_score
+                    ]
+                    high_scores.append(new_entry)
+                    self.save_high_scores(high_scores)
+                    print(
+                        f"High score updated: Score {score} replaced minimum score {min_score}"
+                    )
+
+            # 監視リストから削除（一度スコアが記録されたら監視終了）
+            del self.monitoring_messages[msgId]
 
 
 async def setup(bot: commands.Bot):
