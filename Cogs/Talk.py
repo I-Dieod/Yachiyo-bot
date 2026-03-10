@@ -11,6 +11,7 @@ from google import genai
 from google.genai import types
 
 client = genai.Client()
+model_name = "gemini-3-flash-preview"
 ch_work1 = 1477312385046810807  # 作業部屋1聞き専
 ch_room = 1478915638268395562  # やちよのお部屋
 ch_esc = 874294006895493123
@@ -90,7 +91,7 @@ class Talk(commands.Cog):
 
         def call_api():
             return client.models.generate_content(
-                model="gemini-3-flash-preview",
+                model=model_name,
                 config=types.GenerateContentConfig(
                     system_instruction=self.system_instruction
                 ),
@@ -114,7 +115,7 @@ class Talk(commands.Cog):
 
         try:
             response = client.models.generate_content(
-                model="gemini-3-flash-preview",
+                model=model_name,
                 config=types.GenerateContentConfig(
                     system_instruction=self.system_instruction
                 ),
@@ -205,7 +206,7 @@ class Talk(commands.Cog):
 
         def call_api():
             return client.models.generate_content(
-                model="gemini-3-flash-preview",
+                model=model_name,
                 config=types.GenerateContentConfig(
                     system_instruction=self.system_instruction
                 ),
