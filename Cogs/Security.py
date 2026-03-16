@@ -10,7 +10,7 @@ pattern2 = r"mfa\.[\w-]{80,90}"
 pattern3 = r"[a-zA-Z0-9]{15}"
 log_ch = 1478490523592560681  # 超かぐや姫！ファンサーバー server-log
 muteRole = 1478580818954686524
-detect_len = 200
+detect_len = 5000
 
 # カスタム絵文字のパターン（cyalume_light系を特定）
 CYALUME_EMOJI_PATTERN = r"<:cyalume_light\d*_[^:]*:\d+>"
