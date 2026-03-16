@@ -12,6 +12,9 @@ log_ch = 1478490523592560681  # 超かぐや姫！ファンサーバー server-l
 muteRole = 1478580818954686524
 detect_len = 200
 
+# カスタム絵文字のパターン（cyalume_light系を特定）
+CYALUME_EMOJI_PATTERN = r"<:cyalume_light\d*_[^:]*:\d+>"
+
 
 class Security(commands.Cog):
     def __init__(self, bot: commands.Bot):
@@ -32,9 +35,24 @@ class Security(commands.Cog):
                 if ch:
                     await ch.send("コンディション更新、カラーオレンジです。")
 
+    def normalize_text_for_similarity(self, text):
+        """類似度計算用にテキストを正規化"""
+        # cyalume_light系絵文字を除去
+        normalized = re.sub(CYALUME_EMOJI_PATTERN, "", text)
+
+        # 連続する空白を単一の空白に統一
+        normalized = re.sub(r"\s+", " ", normalized)
+
+        # 前後の空白を除去
+        return normalized.strip()
+
     def calculate_similarity(self, text1, text2):
-        """2つのテキストの類似度を計算（0.0-1.0）"""
-        return SequenceMatcher(None, text1, text2).ratio()
+        """2つのテキストの類似度を計算（0.0-1.0）- 絵文字を正規化して比較"""
+        # 両方のテキストを正規化
+        normalized_text1 = self.normalize_text_for_similarity(text1)
+        normalized_text2 = self.normalize_text_for_similarity(text2)
+
+        return SequenceMatcher(None, normalized_text1, normalized_text2).ratio()
 
     async def start_channel_monitoring(self, channel_id):
         """チャンネル監視を開始"""
