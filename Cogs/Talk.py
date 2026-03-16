@@ -1,4 +1,5 @@
 import asyncio
+import difflib
 import json
 import random
 from datetime import datetime, timedelta
@@ -11,7 +12,7 @@ from google import genai
 from google.genai import types
 
 client = genai.Client()
-model_name = "gemini-3-flash-preview"
+model_name = "gemini-3.1-flash-lite-preview"
 ch_work1 = 1477312385046810807  # 作業部屋1聞き専
 ch_room = 1478915638268395562  # やちよのお部屋
 ch_esc = 874294006895493123
@@ -76,6 +77,10 @@ class Talk(commands.Cog):
         )
         self.cleanup_monitoring.start()  # 5分間の監視タスクを開始
 
+        # 類似メッセージ検出関連の変数
+        self.recent_messages_history = []  # 3つ前までのメッセージ履歴を保持
+        self.mute_role_name = "Muted"  # ミュートロール名
+
     @commands.command()
     async def reload_prompt(self, ctx: commands.Context) -> None:
         """システムプロンプトをリロードする"""
@@ -84,6 +89,35 @@ class Talk(commands.Cog):
             await ctx.send("✅ システムプロンプトをリロードしました！")
         except Exception as e:
             await ctx.send(f"❌ システムプロンプトのリロードに失敗しました: {e}")
+
+    @commands.command()
+    @commands.has_permissions(administrator=True)
+    async def set_mute_role(self, ctx: commands.Context, role_name: str) -> None:
+        """ミュートロール名を設定する（管理者のみ）"""
+        try:
+            # ロールが存在するかチェック
+            role = discord.utils.get(ctx.guild.roles, name=role_name)
+            if not role:
+                await ctx.send(f"❌ ロール '{role_name}' が見つかりません。")
+                return
+
+            self.mute_role_name = role_name
+            await ctx.send(f"✅ ミュートロールを '{role_name}' に設定しました。")
+        except Exception as e:
+            await ctx.send(f"❌ ミュートロール設定中にエラーが発生しました: {e}")
+
+    @commands.command()
+    async def get_mute_role(self, ctx: commands.Context) -> None:
+        """現在のミュートロール名を表示する"""
+        await ctx.send(f"📋 現在のミュートロール: `{self.mute_role_name}`")
+
+    @set_mute_role.error
+    async def set_mute_role_error(self, ctx, error):
+        """set_mute_roleコマンドのエラーハンドラー"""
+        if isinstance(error, commands.MissingPermissions):
+            await ctx.send("❌ このコマンドの使用には管理者権限が必要です。")
+        elif isinstance(error, commands.MissingRequiredArgument):
+            await ctx.send("❌ 使用方法: `!set_mute_role <ロール名>`")
 
     @commands.command()
     async def talk(self, ctx: commands.Context) -> None:
@@ -183,11 +217,134 @@ class Talk(commands.Cog):
 
         self.current_message_count += 1
 
+        # 類似メッセージチェックを実行
+        self.check_message_similarity(message)
+
         # 目標メッセージ数に到達したら応答
         if self.current_message_count >= self.next_message_count:
             await self._send_ai_response(message.channel)
             self.current_message_count = 0
             self.next_message_count = self._get_random_message_count()
+
+    def calculate_similarity(self, text1: str, text2: str) -> float:
+        """2つのテキストの類似度を計算する（0.0-1.0）"""
+        return difflib.SequenceMatcher(None, text1, text2).ratio()
+
+    def check_message_similarity(self, message):
+        """メッセージの類似度をチェックし、必要に応じて履歴を更新"""
+        # ボット自身のメッセージは無視
+        if message.author.bot:
+            return
+
+        # 指定されたチャンネルでのみ動作
+        if message.channel.id != self.target_channel_id:
+            return
+
+        message_content = message.content.strip()
+
+        # 文字数が200文字を超えているかチェック
+        if len(message_content) <= 200:
+            # 新しいメッセージを履歴に追加（200文字以下でも履歴は更新）
+            self.recent_messages_history.append(
+                {
+                    "content": message_content,
+                    "author": message.author.display_name,
+                    "timestamp": message.created_at,
+                }
+            )
+
+            # 3つまでに制限
+            if len(self.recent_messages_history) > 3:
+                self.recent_messages_history.pop(0)
+            return
+
+        # 過去3つのメッセージと類似度をチェック
+        for i, past_msg in enumerate(self.recent_messages_history):
+            similarity = self.calculate_similarity(message_content, past_msg["content"])
+
+            if similarity >= 0.9:  # 90%以上の類似度
+                print(f"⚠️ 類似メッセージを検出: 類似度 {similarity:.2%}")
+                print(
+                    f"現在のメッセージ ({len(message_content)}文字): {message_content[:100]}..."
+                )
+                print(f"類似する過去のメッセージ: {past_msg['content'][:100]}...")
+                print(
+                    f"投稿者: {message.author.display_name} (過去: {past_msg['author']})"
+                )
+
+                # ユーザーにミュートロールを付与
+                await self.apply_mute_role(message)
+                break
+
+        # 新しいメッセージを履歴に追加
+        self.recent_messages_history.append(
+            {
+                "content": message_content,
+                "author": message.author.display_name,
+                "timestamp": message.created_at,
+            }
+        )
+
+        # 3つまでに制限
+        if len(self.recent_messages_history) > 3:
+            self.recent_messages_history.pop(0)
+
+    async def apply_mute_role(self, message):
+        """類似メッセージを送信したユーザーにミュートロールを付与"""
+        try:
+            guild = message.guild
+            if not guild:
+                return
+
+            # 管理者権限を持つユーザーはミュート対象外
+            if message.author.guild_permissions.administrator:
+                print(
+                    f"⚠️ 管理者権限ユーザー {message.author.display_name} はミュート対象外"
+                )
+                return
+
+            # ミュートロールを検索
+            mute_role = discord.utils.get(guild.roles, name=self.mute_role_name)
+
+            if not mute_role:
+                print(f"❌ ミュートロール '{self.mute_role_name}' が見つかりません")
+                # チャンネルに警告メッセージを送信
+                await message.channel.send(
+                    f"⚠️ スパムメッセージを検出しましたが、ミュートロール '{self.mute_role_name}' が存在しません。"
+                )
+                return
+
+            # 既にミュートロールを持っている場合はスキップ
+            if mute_role in message.author.roles:
+                print(
+                    f"ℹ️ ユーザー {message.author.display_name} は既にミュートされています"
+                )
+                return
+
+            # ミュートロールを付与
+            await message.author.add_roles(
+                mute_role, reason="類似メッセージによるスパム検出"
+            )
+
+            print(
+                f"🔇 ユーザー {message.author.display_name} にミュートロールを付与しました"
+            )
+
+            # チャンネルに通知メッセージを送信
+            await message.channel.send(
+                f"⚠️ {message.author.mention} 類似メッセージが検出されたため、一時的にミュートされました。"
+            )
+
+        except discord.Forbidden:
+            print(f"❌ ミュートロール付与の権限がありません")
+            await message.channel.send(
+                "⚠️ スパムメッセージを検出しましたが、ミュート権限がありません。"
+            )
+        except Exception as e:
+            print(f"❌ ミュートロール付与中にエラーが発生: {e}")
+            await message.channel.send(
+                "⚠️ スパムメッセージを検出しましたが、処理中にエラーが発生しました。"
+            )
 
     async def _send_ai_response(self, channel):
         """AIの応答を生成してチャンネルに送信"""

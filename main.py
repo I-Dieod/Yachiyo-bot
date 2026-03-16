@@ -2,6 +2,7 @@ import asyncio
 import logging
 import os
 
+import aiomysql
 import discord
 from aiohttp import web
 from discord.ext import commands
@@ -30,9 +31,20 @@ class Yachiyo(commands.Bot):
             strip_after_prefix=strip_after_prefix,
         )
         self.remove_command("help")
-        self.db = None
+        self.db: aiomysql.Pool | None = None
 
     async def setup_hook(self) -> None:
+        self.db = await aiomysql.create_pool(
+            host=os.getenv("HOST", "localhost"),
+            port=int(os.getenv("PORT", "3306")),
+            user=os.getenv("YACHIYO"),
+            password=os.getenv("PASSWORD"),
+            db=os.getenv("DATABASE"),
+            autocommit=False,
+            minsize=1,
+            maxsize=5,
+        )
+        logging.info("MySQL connection pool created")
 
         # Cogs load Section
         for cog in INITIAL_EXTENSIONS:
@@ -54,6 +66,9 @@ class Yachiyo(commands.Bot):
             print(f"Failed to sync commands: {e}")
 
         logging.info("Yachiyo is All Ready")
+
+    async def seedingDb(self) -> None:
+        pass
 
 
 async def health_check_handler(request):
