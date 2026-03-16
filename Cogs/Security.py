@@ -10,6 +10,7 @@ pattern2 = r"mfa\.[\w-]{80,90}"
 pattern3 = r"[a-zA-Z0-9]{15}"
 log_ch = 1478490523592560681  # 超かぐや姫！ファンサーバー server-log
 muteRole = 1478580818954686524
+detect_len = 100
 
 
 class Security(commands.Cog):
@@ -76,7 +77,7 @@ class Security(commands.Cog):
             return
 
         # 200文字超えのメッセージが来たら監視開始
-        if len(content) > 200 and channel_id not in self.monitoring_channels:
+        if len(content) > detect_len and channel_id not in self.monitoring_channels:
             await self.start_channel_monitoring(channel_id)
 
         # 監視中のチャンネルでない場合は何もしない
@@ -90,7 +91,7 @@ class Security(commands.Cog):
         buffer = self.channel_message_buffer[channel_id]
 
         # 200文字超えのメッセージの場合、類似度をチェック
-        if len(content) > 200:
+        if len(content) > detect_len:
             max_similarity = 0.0
             spam_detected = False
 
@@ -142,7 +143,7 @@ class Security(commands.Cog):
                     self.low_similarity_count[channel_id] += 1
 
         # バッファに新しいメッセージを追加（200文字超えのもののみ）
-        if len(content) > 200:
+        if len(content) > detect_len:
             buffer.append(content)
             # 最新3つのメッセージのみ保持
             if len(buffer) > 3:
