@@ -11,7 +11,7 @@ class CheckDiffSpam:
         self.normalRole = 1473305169310515425  # 雑談ロール
         self.muteRole = 1478580818954686524  # おいたはダメだよ～ロール
 
-        self.detect_len = 200
+        self.detect_len = 5000
         # サイリウム絵文字パターン（色名部分を柔軟に）
         self.CYALUME_EMOJI_PATTERN = r":cyalume_light\d+_[a-zA-Z]+:\d+"
 
