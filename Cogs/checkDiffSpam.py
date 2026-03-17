@@ -79,13 +79,6 @@ class CheckDiffSpam:
         self.monitoring_channels.add(channel_id)
         if channel_id not in self.channel_message_buffer:
             self.channel_message_buffer[channel_id] = []
-            # ログチャンネルに監視開始を報告
-            log_channel = self.bot.get_channel(self.log_ch)
-            if log_channel:
-                await log_channel.send(
-                    f"📊 チャンネル監視開始: <#{channel_id}>\n"
-                    f"スパムの可能性があるメッセージが送信されました。"
-                )
         if channel_id not in self.consecutive_low_similarity:
             self.consecutive_low_similarity[channel_id] = 0
 
@@ -127,6 +120,13 @@ class CheckDiffSpam:
             and channel_id not in self.monitoring_channels
         ):
             await self.start_channel_monitoring(channel_id)
+            # ログチャンネルに監視開始を報告
+            log_channel = self.bot.get_channel(self.log_ch)
+            if log_channel:
+                await log_channel.send(
+                    f"📊 チャンネル監視開始: <#{channel_id}>\n"
+                    f"理由: 200文字超えのメッセージを検出"
+                )
 
         # 監視中のチャンネルでない場合は何もしない
         if channel_id not in self.monitoring_channels:
@@ -138,21 +138,28 @@ class CheckDiffSpam:
 
         buffer = self.channel_message_buffer[channel_id]
 
-        # 監視中は文字数に関わらず類似度をチェック
+        # 先にバッファに新しいメッセージを追加
+        buffer.append(content)
+        # 最新5つのメッセージのみ保持
+        if len(buffer) > 5:
+            buffer.pop(0)
+
+        # 監視中は文字数に関わらず類似度をチェック（バッファに2つ以上ある場合）
         max_similarity = 0.0
         spam_detected = False
 
-        # 200文字超えの場合のみスパム判定を行う
-        if len(content) > self.detect_len:
-            # バッファ内の各メッセージと類似度を比較
-            for old_message in buffer:
-                similarity, text1, text2 = self.calculate_similarity(
-                    content, old_message
-                )
+        if len(buffer) >= 2:  # バッファに比較対象がある場合
+            # 新しいメッセージ（最後の要素）と過去のメッセージを比較
+            current_message = buffer[-1]  # 現在のメッセージ
+
+            # バッファ内の他の全メッセージとの最大類似度を計算
+            for i in range(len(buffer) - 1):  # 最後の要素（現在のメッセージ）以外と比較
+                old_message = buffer[i]
+                similarity = self.calculate_similarity(current_message, old_message)
                 max_similarity = max(max_similarity, similarity)
 
-                # 9割以上の類似度を検出
-                if similarity >= 0.9:
+                # 200文字超えかつ9割以上の類似度でスパム検出
+                if len(content) > self.detect_len and similarity >= 0.9:
                     spam_detected = True
                     # give_mute関数を使用してミュートロール付与（権限競合回避）
                     mute_success = await self.give_mute(message.author)
@@ -165,9 +172,7 @@ class CheckDiffSpam:
                                 f"🚨 スパム検出: <@{message.author.id}> にミュートロールを付与しました。\n"
                                 f"類似度: {similarity:.2%}\n"
                                 f"チャンネル: {message.channel.name} (ID: {message.channel.id})\n"
-                                f"メッセージ長: {len(content)}文字\n"
-                                f"テキスト１: {text1}\n"
-                                f"テキスト２: {text2}\n"
+                                f"メッセージ長: {len(content)}文字"
                             )
 
                         # メッセージを削除
@@ -181,17 +186,10 @@ class CheckDiffSpam:
                                 f"類似度: {similarity:.2%}\n"
                                 f"チャンネル: {message.channel.name} (ID: {message.channel.id})"
                             )
-                    return
+                    return  # スパム検出したら処理終了
 
-        # 全てのメッセージ（文字数問わず）に対して類似度チェック（監視停止判定用）
-        if len(buffer) > 0:
-            # バッファ内の全メッセージとの最大類似度を計算
-            for old_message in buffer:
-                similarity = self.calculate_similarity(content, old_message)
-                max_similarity = max(max_similarity, similarity)
-
-        # 類似度による監視停止条件の更新
-        if len(buffer) > 0:  # バッファに何かメッセージがある場合
+        # 類似度による監視停止条件の更新（バッファに2つ以上ある場合のみ）
+        if len(buffer) >= 2:
             if max_similarity < 0.9:
                 # 連続する低類似度カウントを増加
                 if channel_id not in self.consecutive_low_similarity:
@@ -200,12 +198,11 @@ class CheckDiffSpam:
             else:
                 # 類似度が0.9以上の場合、連続カウントをリセット
                 self.consecutive_low_similarity[channel_id] = 0
-
-        # バッファに新しいメッセージを追加（全メッセージ対象）
-        buffer.append(content)
-        # 最新5つのメッセージのみ保持
-        if len(buffer) > 5:
-            buffer.pop(0)
+        else:
+            # バッファに1つしかメッセージがない場合（初回メッセージ）
+            # 連続カウントを初期化
+            if channel_id not in self.consecutive_low_similarity:
+                self.consecutive_low_similarity[channel_id] = 0
 
         # 監視停止条件をチェック
         await self.check_monitoring_stop_condition(channel_id)
