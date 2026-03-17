@@ -3,10 +3,11 @@ import re
 from datetime import datetime
 
 import discord
-from checkDiffSpam import CheckDiffSpam
 from discord.ext import commands
 
 from database import db_manager
+
+from .checkDiffSpam import CheckDiffSpam
 
 logger = logging.getLogger(__name__)
 
