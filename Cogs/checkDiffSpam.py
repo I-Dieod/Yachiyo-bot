@@ -13,7 +13,7 @@ class CheckDiffSpam:
 
         self.detect_len = 200
         # サイリウム絵文字パターン（色名部分を柔軟に）
-        self.CYALUME_EMOJI_PATTERN = r"<:cyalume_light\d+_[a-zA-Z]+:\d+>"
+        self.CYALUME_EMOJI_PATTERN = r":cyalume_light\d+_[a-zA-Z]+:\d+"
 
         # チャンネルベースの監視システム
         self.monitoring_channels = set()  # 監視中のチャンネルID
