@@ -8,16 +8,46 @@ class CheckDiffSpam:
     def __init__(self, bot):
         self.bot = bot
         self.log_ch = 1478490523592560681  # 超かぐや姫！ファンサーバー server-log
-        self.muteRole = 1478580818954686524
+        self.normalRole = 1473305169310515425  # 雑談ロール
+        self.muteRole = 1478580818954686524  # おいたはダメだよ～ロール
 
         self.detect_len = 200
-        # カスタム絵文字のパターン（cyalume_light系を特定）
-        self.CYALUME_EMOJI_PATTERN = r"<:cyalume_light\d*_[^:]*:\d+>"
+        # サイリウム絵文字パターン（色名部分を柔軟に）
+        self.CYALUME_EMOJI_PATTERN = r"<:cyalume_light\d+_[a-zA-Z]+:\d+>"
 
         # チャンネルベースの監視システム
         self.monitoring_channels = set()  # 監視中のチャンネルID
-        self.channel_message_buffer = {}  # {channel_id: [message1, message2, message3]}
-        self.low_similarity_count = {}  # {channel_id: count} 類似度0.9未満のカウント
+        self.channel_message_buffer = {}  # {channel_id: [message1, message2, message3, message4, message5]}
+        self.consecutive_low_similarity = {}  # {channel_id: count} 連続する類似度0.9未満のカウント
+
+    async def give_mute(self, member: discord.Member):
+        try:
+            role_Normal = member.guild.get_role(self.normalRole)
+            role_Mute = member.guild.get_role(self.muteRole)
+
+            # ロールの存在確認
+            if role_Mute is None:
+                print(f"Error: Mute role (ID: {self.muteRole}) not found")
+                return False
+
+            if role_Normal is None:
+                print(f"Warning: Normal role (ID: {self.normalRole}) not found")
+
+            # ミュートロール付与
+            await member.add_roles(role_Mute)
+
+            # 一般ロール削除（存在する場合のみ）
+            if role_Normal is not None:
+                await member.remove_roles(role_Normal)
+
+            return True
+
+        except discord.Forbidden:
+            print(f"Permission error: Cannot modify roles for {member}")
+            return False
+        except Exception as e:
+            print(f"Error in give_mute: {e}")
+            return False
 
     def normalize_text_for_similarity(self, text):
         """類似度計算用にテキストを正規化"""
@@ -43,8 +73,8 @@ class CheckDiffSpam:
         self.monitoring_channels.add(channel_id)
         if channel_id not in self.channel_message_buffer:
             self.channel_message_buffer[channel_id] = []
-        if channel_id not in self.low_similarity_count:
-            self.low_similarity_count[channel_id] = 0
+        if channel_id not in self.consecutive_low_similarity:
+            self.consecutive_low_similarity[channel_id] = 0
 
     async def stop_channel_monitoring(self, channel_id):
         """チャンネル監視を停止してバッファをリセット"""
@@ -52,21 +82,21 @@ class CheckDiffSpam:
             self.monitoring_channels.remove(channel_id)
         if channel_id in self.channel_message_buffer:
             del self.channel_message_buffer[channel_id]
-        if channel_id in self.low_similarity_count:
-            del self.low_similarity_count[channel_id]
+        if channel_id in self.consecutive_low_similarity:
+            del self.consecutive_low_similarity[channel_id]
 
     async def check_monitoring_stop_condition(self, channel_id):
         """監視停止条件をチェック"""
-        # 類似度が0.9を切ったカウントがバッファ中で2になったら監視停止
-        if channel_id in self.low_similarity_count:
-            if self.low_similarity_count[channel_id] >= 2:
+        # 連続して3つのメッセージが類似度0.9未満になったら監視停止
+        if channel_id in self.consecutive_low_similarity:
+            if self.consecutive_low_similarity[channel_id] >= 3:
                 await self.stop_channel_monitoring(channel_id)
                 # ログチャンネルに監視停止を報告
                 log_channel = self.bot.get_channel(self.log_ch)
                 if log_channel:
                     await log_channel.send(
                         f"📊 チャンネル監視停止: <#{channel_id}>\n"
-                        f"理由: 類似度0.9未満のメッセージが2つに到達"
+                        f"理由: 連続する3つのメッセージが類似度0.9未満"
                     )
 
     async def check_diffspam_and_mute(self, message):
@@ -95,11 +125,12 @@ class CheckDiffSpam:
 
         buffer = self.channel_message_buffer[channel_id]
 
-        # 200文字超えのメッセージの場合、類似度をチェック
-        if len(content) > self.detect_len:
-            max_similarity = 0.0
-            spam_detected = False
+        # 監視中は文字数に関わらず類似度をチェック
+        max_similarity = 0.0
+        spam_detected = False
 
+        # 200文字超えの場合のみスパム判定を行う
+        if len(content) > self.detect_len:
             # バッファ内の各メッセージと類似度を比較
             for old_message in buffer:
                 similarity = self.calculate_similarity(content, old_message)
@@ -108,51 +139,56 @@ class CheckDiffSpam:
                 # 9割以上の類似度を検出
                 if similarity >= 0.9:
                     spam_detected = True
-                    try:
-                        # muteRoleを付与
-                        role = message.guild.get_role(self.muteRole)
-                        if role:
-                            await message.author.add_roles(role)
+                    # give_mute関数を使用してミュートロール付与（権限競合回避）
+                    mute_success = await self.give_mute(message.author)
 
-                            # ログチャンネルに報告
-                            log_channel = self.bot.get_channel(self.log_ch)
-                            if log_channel:
-                                await log_channel.send(
-                                    f"🚨 スパム検出: <@{message.author.id}> にミュートロールを付与しました。\n"
-                                    f"類似度: {similarity:.2%}\n"
-                                    f"チャンネル: {message.channel.name} (ID: {message.channel.id})\n"
-                                    f"メッセージ長: {len(content)}文字"
-                                )
-
-                            # メッセージを削除
-                            await message.delete()
-                            return
-
-                    except discord.Forbidden:
-                        # 権限不足の場合のログ
+                    if mute_success:
+                        # ログチャンネルに報告
                         log_channel = self.bot.get_channel(self.log_ch)
                         if log_channel:
                             await log_channel.send(
-                                f"⚠️ 権限不足: <@{message.author.id}> のスパムを検出しましたが、ミュートできませんでした。"
+                                f"🚨 スパム検出: <@{message.author.id}> にミュートロールを付与しました。\n"
+                                f"類似度: {similarity:.2%}\n"
+                                f"チャンネル: {message.channel.name} (ID: {message.channel.id})\n"
+                                f"メッセージ長: {len(content)}文字"
                             )
-                    except Exception as e:
-                        print(f"Error in spam detection: {e}")
-                    break  # スパム検出したらループ終了
 
-            # スパムが検出されなかった場合、最大類似度をチェック
-            if not spam_detected and len(buffer) > 0:
-                if max_similarity < 0.9:
-                    # 類似度0.9未満のカウントを増加
-                    if channel_id not in self.low_similarity_count:
-                        self.low_similarity_count[channel_id] = 0
-                    self.low_similarity_count[channel_id] += 1
+                        # メッセージを削除
+                        await message.delete()
+                    else:
+                        # ミュート失敗の場合のログ
+                        log_channel = self.bot.get_channel(self.log_ch)
+                        if log_channel:
+                            await log_channel.send(
+                                f"⚠️ スパム検出: <@{message.author.id}> のスパムを検出しましたが、ミュート処理に失敗しました。\n"
+                                f"類似度: {similarity:.2%}\n"
+                                f"チャンネル: {message.channel.name} (ID: {message.channel.id})"
+                            )
+                    return
 
-        # バッファに新しいメッセージを追加（200文字超えのもののみ）
-        if len(content) > self.detect_len:
-            buffer.append(content)
-            # 最新3つのメッセージのみ保持
-            if len(buffer) > 3:
-                buffer.pop(0)
+        # 全てのメッセージ（文字数問わず）に対して類似度チェック（監視停止判定用）
+        if len(buffer) > 0:
+            # バッファ内の全メッセージとの最大類似度を計算
+            for old_message in buffer:
+                similarity = self.calculate_similarity(content, old_message)
+                max_similarity = max(max_similarity, similarity)
+
+        # 類似度による監視停止条件の更新
+        if len(buffer) > 0:  # バッファに何かメッセージがある場合
+            if max_similarity < 0.9:
+                # 連続する低類似度カウントを増加
+                if channel_id not in self.consecutive_low_similarity:
+                    self.consecutive_low_similarity[channel_id] = 0
+                self.consecutive_low_similarity[channel_id] += 1
+            else:
+                # 類似度が0.9以上の場合、連続カウントをリセット
+                self.consecutive_low_similarity[channel_id] = 0
+
+        # バッファに新しいメッセージを追加（全メッセージ対象）
+        buffer.append(content)
+        # 最新5つのメッセージのみ保持
+        if len(buffer) > 5:
+            buffer.pop(0)
 
         # 監視停止条件をチェック
         await self.check_monitoring_stop_condition(channel_id)

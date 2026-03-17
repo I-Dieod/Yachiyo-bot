@@ -3,6 +3,7 @@ import re
 from datetime import datetime
 
 import discord
+from discord import app_commands
 from discord.ext import commands
 
 from database import db_manager
@@ -16,7 +17,8 @@ pattern1 = r"[\w-]{20,28}\.[\w-]{3,10}\.[\w-]{22,30}"
 pattern2 = r"mfa\.[\w-]{80,90}"
 pattern3 = r"[a-zA-Z0-9]{15}"
 log_ch = 1478490523592560681  # 超かぐや姫！ファンサーバー server-log
-muteRole = 1478580818954686524
+normalRole = 1473305169310515425  # 雑談ロール
+muteRole = 1478580818954686524  # おいたはダメだよ～ロール
 
 
 class Security(commands.Cog):
@@ -41,6 +43,12 @@ class Security(commands.Cog):
             logger.info("Database connection closed for Security cog")
         except Exception as e:
             logger.error(f"Failed to close database connection: {e}")
+
+    async def give_mute(self, member: discord.Member):
+        role_Normal = member.guild.get_roles(normalRole)
+        role_Mute = member.guild.get_role(muteRole)  # おいたはダメだよ〜
+        await member.add_roles(role_Mute)
+        await member.remove_roles(role_Normal)
 
     @commands.Cog.listener()
     async def on_member_join(self, member):
@@ -132,6 +140,10 @@ class Security(commands.Cog):
                 await ch.send(f"<@{m_author}> がメッセージを編集しトークン化しました。")
                 await ch.send(f"発生場所:{msg_c_name}(id: {msg_c_id})")
 
+    @app_commands.command(name="mute", description="直近24時間の参加者をミュートする")
+    async def slash_mute(self, interaction: discord.Interaction) -> None:
+        pass
+
     @commands.command()
     async def join_info(self, ctx, user_id: int = None):
         """ユーザーの参加情報を表示"""
@@ -165,48 +177,6 @@ class Security(commands.Cog):
         except Exception as e:
             logger.error(f"Failed to get user join info: {e}")
             await ctx.send("参加情報の取得中にエラーが発生しました。")
-
-    @commands.command()
-    async def recent_joins(self, ctx, limit: int = 5):
-        """最近参加したユーザーを表示"""
-        if limit > 20:
-            limit = 20
-        elif limit < 1:
-            limit = 1
-
-        try:
-            recent_users = await db_manager.get_recent_joins(ctx.guild.id, limit)
-
-            if not recent_users:
-                await ctx.send("参加記録がありません。")
-                return
-
-            embed = discord.Embed(
-                title=f"最近の参加者 (上位{len(recent_users)}名)", color=0x00FF00
-            )
-
-            for user_data in recent_users:
-                user_id = user_data["user_id"]
-                join_time = user_data["join_time"]
-                display_name = user_data.get("display_name", "不明")
-
-                formatted_time = join_time.strftime("%m/%d %H:%M")
-
-                embed.add_field(
-                    name=f"<@{user_id}>",
-                    value=f"参加: {formatted_time}\n名前: {display_name}",
-                    inline=True,
-                )
-
-            # 総参加記録数も表示
-            total_count = await db_manager.get_user_join_count(ctx.guild.id)
-            embed.set_footer(text=f"総参加記録数: {total_count}")
-
-            await ctx.send(embed=embed)
-
-        except Exception as e:
-            logger.error(f"Failed to get recent joins: {e}")
-            await ctx.send("参加記録の取得中にエラーが発生しました。")
 
     @commands.command()
     async def join_stats(self, ctx):
