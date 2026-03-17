@@ -94,7 +94,7 @@ class CheckDiffSpam:
                 log_channel = self.bot.get_channel(self.log_ch)
                 if log_channel:
                     await log_channel.send(
-                        f"📊 チャンネル監視停止: <#{channel_id}>\n"
+                        f"📊 チャンネル監視**停止**: <#{channel_id}>\n"
                         f"理由: 連続する3つのメッセージが類似度0.9未満"
                     )
 
@@ -117,7 +117,7 @@ class CheckDiffSpam:
             log_channel = self.bot.get_channel(self.log_ch)
             if log_channel:
                 await log_channel.send(
-                    f"📊 チャンネル監視開始: <#{channel_id}>\n"
+                    f"📊 チャンネル監視**開始**: <#{channel_id}>\n"
                     f"理由: 200文字超えのメッセージを検出"
                 )
 
