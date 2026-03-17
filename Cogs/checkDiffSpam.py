@@ -158,9 +158,9 @@ class CheckDiffSpam:
                                 f"🚨 スパム検出: <@{message.author.id}> にミュートロールを付与しました。\n"
                                 f"類似度: {similarity:.2%}\n"
                                 f"チャンネル: {message.channel.name} (ID: {message.channel.id})\n"
-                                f"メッセージ長: {len(content)}文字",
-                                f"テキスト１: {text1}",
-                                f"テキスト２: {text2}",
+                                f"メッセージ長: {len(content)}文字\n"
+                                f"テキスト１: {text1}\n"
+                                f"テキスト２: {text2}\n"
                             )
 
                         # メッセージを削除
