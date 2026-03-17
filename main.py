@@ -7,6 +7,8 @@ from aiohttp import web
 from discord.ext import commands
 from dotenv import load_dotenv
 
+from database import db_manager
+
 load_dotenv()
 
 # Set the logging level for discord.py to DEBUG
@@ -33,6 +35,15 @@ class Yachiyo(commands.Bot):
         self.db = None
 
     async def setup_hook(self) -> None:
+        # Initialize database connection
+        try:
+            await db_manager.create_pool()
+            await db_manager.initialize_tables()
+            logging.info("Database initialized successfully")
+            print("Database initialized successfully")
+        except Exception as e:
+            logging.error(f"Failed to initialize database: {e}")
+            print(f"Failed to initialize database: {e}")
 
         # Cogs load Section
         for cog in INITIAL_EXTENSIONS:
@@ -54,6 +65,11 @@ class Yachiyo(commands.Bot):
             print(f"Failed to sync commands: {e}")
 
         logging.info("Yachiyo is All Ready")
+
+    async def close(self):
+        """Clean up database connections when bot shuts down"""
+        await db_manager.close_pool()
+        await super().close()
 
 
 async def health_check_handler(request):
@@ -85,8 +101,12 @@ async def main():
     # Start health check server
     await start_health_server()
 
-    # Start Discord bot
-    await bot.start(token)
+    try:
+        # Start Discord bot
+        await bot.start(token)
+    finally:
+        # Ensure database connections are closed
+        await bot.close()
 
 
 if __name__ == "__main__":
