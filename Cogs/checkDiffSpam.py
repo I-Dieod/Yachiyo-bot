@@ -62,15 +62,17 @@ class CheckDiffSpam:
         # 前後の空白を除去
         return normalized.strip()
 
-    async def calculate_similarity(self, text1, text2):
+    def calculate_similarity(self, text1, text2):
         """2つのテキストの類似度を計算（0.0-1.0）- 絵文字を正規化して比較"""
         # 両方のテキストを正規化
         normalized_text1 = self.normalize_text_for_similarity(text1)
         normalized_text2 = self.normalize_text_for_similarity(text2)
-        ch = self.bot.get_channel(log_ch)
-        await ch.send(f"{normalized_text1}\n{normalized_text2}")
 
-        return SequenceMatcher(None, normalized_text1, normalized_text2).ratio()
+        return (
+            SequenceMatcher(None, normalized_text1, normalized_text2).ratio(),
+            normalized_text1,
+            normalized_text2,
+        )
 
     async def start_channel_monitoring(self, channel_id):
         """チャンネル監視を開始"""
@@ -137,7 +139,9 @@ class CheckDiffSpam:
         if len(content) > self.detect_len:
             # バッファ内の各メッセージと類似度を比較
             for old_message in buffer:
-                similarity = self.calculate_similarity(content, old_message)
+                similarity, text1, text2 = self.calculate_similarity(
+                    content, old_message
+                )
                 max_similarity = max(max_similarity, similarity)
 
                 # 9割以上の類似度を検出
@@ -154,7 +158,9 @@ class CheckDiffSpam:
                                 f"🚨 スパム検出: <@{message.author.id}> にミュートロールを付与しました。\n"
                                 f"類似度: {similarity:.2%}\n"
                                 f"チャンネル: {message.channel.name} (ID: {message.channel.id})\n"
-                                f"メッセージ長: {len(content)}文字"
+                                f"メッセージ長: {len(content)}文字",
+                                f"テキスト１: {text1}",
+                                f"テキスト２: {text2}",
                             )
 
                         # メッセージを削除
