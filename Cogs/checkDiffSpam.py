@@ -155,7 +155,9 @@ class CheckDiffSpam:
             # バッファ内の他の全メッセージとの最大類似度を計算
             for i in range(len(buffer) - 1):  # 最後の要素（現在のメッセージ）以外と比較
                 old_message = buffer[i]
-                similarity = self.calculate_similarity(current_message, old_message)
+                similarity, text1, text2 = self.calculate_similarity(
+                    current_message, old_message
+                )
                 max_similarity = max(max_similarity, similarity)
 
                 # 200文字超えかつ9割以上の類似度でスパム検出
@@ -172,7 +174,9 @@ class CheckDiffSpam:
                                 f"🚨 スパム検出: <@{message.author.id}> にミュートロールを付与しました。\n"
                                 f"類似度: {similarity:.2%}\n"
                                 f"チャンネル: {message.channel.name} (ID: {message.channel.id})\n"
-                                f"メッセージ長: {len(content)}文字"
+                                f"メッセージ長: {len(content)}文字\n"
+                                f"テキスト１: {text1}\n"
+                                f"テキスト２: {text2}\n"
                             )
 
                         # メッセージを削除
