@@ -3,6 +3,8 @@ from difflib import SequenceMatcher
 
 import discord
 
+log_ch = 1478490523592560681  # 超かぐや姫！ファンサーバー server-log
+
 
 class CheckDiffSpam:
     def __init__(self, bot):
@@ -11,7 +13,7 @@ class CheckDiffSpam:
         self.normalRole = 1473305169310515425  # 雑談ロール
         self.muteRole = 1478580818954686524  # おいたはダメだよ～ロール
 
-        self.detect_len = 5000
+        self.detect_len = 200
         # サイリウム絵文字パターン（色名部分を柔軟に）
         self.CYALUME_EMOJI_PATTERN = r":cyalume_light\d+_[a-zA-Z]+:\d+"
 
@@ -60,11 +62,13 @@ class CheckDiffSpam:
         # 前後の空白を除去
         return normalized.strip()
 
-    def calculate_similarity(self, text1, text2):
+    async def calculate_similarity(self, text1, text2):
         """2つのテキストの類似度を計算（0.0-1.0）- 絵文字を正規化して比較"""
         # 両方のテキストを正規化
         normalized_text1 = self.normalize_text_for_similarity(text1)
         normalized_text2 = self.normalize_text_for_similarity(text2)
+        ch = self.bot.get_channel(log_ch)
+        await ch.send(f"{normalized_text1}\n{normalized_text2}")
 
         return SequenceMatcher(None, normalized_text1, normalized_text2).ratio()
 
