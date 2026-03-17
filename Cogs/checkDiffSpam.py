@@ -79,6 +79,13 @@ class CheckDiffSpam:
         self.monitoring_channels.add(channel_id)
         if channel_id not in self.channel_message_buffer:
             self.channel_message_buffer[channel_id] = []
+            # ログチャンネルに監視開始を報告
+            log_channel = self.bot.get_channel(self.log_ch)
+            if log_channel:
+                await log_channel.send(
+                    f"📊 チャンネル監視開始: <#{channel_id}>\n"
+                    f"スパムの可能性があるメッセージが送信されました。"
+                )
         if channel_id not in self.consecutive_low_similarity:
             self.consecutive_low_similarity[channel_id] = 0
 
