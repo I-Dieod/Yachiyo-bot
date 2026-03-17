@@ -14,8 +14,9 @@ class CheckDiffSpam:
         self.muteRole = 1478580818954686524  # おいたはダメだよ～ロール
 
         self.detect_len = 200
+        self.MIN_NORMALIZED_LENGTH = 10  # 正規化後最低10文字以上
         # サイリウム絵文字パターン（色名部分を柔軟に）
-        self.CYALUME_EMOJI_PATTERN = r":cyalume_light\d+_[a-zA-Z]+:\d+"
+        self.CYALUME_EMOJI_PATTERN = r"<:cyalume_light\d+_[a-zA-Z]+:\d+>"
 
         # チャンネルベースの監視システム
         self.monitoring_channels = set()  # 監視中のチャンネルID
@@ -64,15 +65,7 @@ class CheckDiffSpam:
 
     def calculate_similarity(self, text1, text2):
         """2つのテキストの類似度を計算（0.0-1.0）- 絵文字を正規化して比較"""
-        # 両方のテキストを正規化
-        normalized_text1 = self.normalize_text_for_similarity(text1)
-        normalized_text2 = self.normalize_text_for_similarity(text2)
-
-        return (
-            SequenceMatcher(None, normalized_text1, normalized_text2).ratio(),
-            normalized_text1,
-            normalized_text2,
-        )
+        return SequenceMatcher(None, text1, text2).ratio()
 
     async def start_channel_monitoring(self, channel_id):
         """チャンネル監視を開始"""
@@ -155,9 +148,21 @@ class CheckDiffSpam:
             # バッファ内の他の全メッセージとの最大類似度を計算
             for i in range(len(buffer) - 1):  # 最後の要素（現在のメッセージ）以外と比較
                 old_message = buffer[i]
-                similarity, text1, text2 = self.calculate_similarity(
-                    current_message, old_message
+                norm_current_message = self.normalize_text_for_similarity(
+                    current_message
                 )
+                norm_old_message = self.normalize_text_for_similarity(old_message)
+
+                similarity = 0.0  # 初期化
+                # 正規化後のメッセージが両方とも有効な内容を持つ場合のみ類似度計算
+                if (
+                    len(norm_current_message.strip()) >= self.MIN_NORMALIZED_LENGTH
+                    and len(norm_old_message.strip()) >= self.MIN_NORMALIZED_LENGTH
+                ):
+                    similarity = self.calculate_similarity(
+                        norm_current_message, norm_old_message
+                    )
+
                 max_similarity = max(max_similarity, similarity)
 
                 # 200文字超えかつ9割以上の類似度でスパム検出
@@ -175,8 +180,8 @@ class CheckDiffSpam:
                                 f"類似度: {similarity:.2%}\n"
                                 f"チャンネル: {message.channel.name} (ID: {message.channel.id})\n"
                                 f"メッセージ長: {len(content)}文字\n"
-                                f"テキスト１: {text1}\n"
-                                f"テキスト２: {text2}\n"
+                                f"テキスト１: {norm_current_message}\n"
+                                f"テキスト２: {norm_old_message}\n"
                             )
 
                         # メッセージを削除
