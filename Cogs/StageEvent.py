@@ -1,4 +1,5 @@
-from typing import Union
+from datetime import datetime
+from typing import Optional, Union
 
 import discord
 from discord.ext import commands
@@ -7,6 +8,33 @@ from discord.ui import Button, Modal, TextInput, View
 # 審査チャンネルのID
 REVIEW_CHANNEL_ID = 1483869724482998383  # ステージコーディネート申請
 APPLY_ROLE_ID = 1483867597777928362  # ステージコーディネーター
+
+
+def _normalize_date(value: str) -> Optional[str]:
+    """
+    ユーザー入力の日付文字列を正規化して yyyy/mm/dd 形式で返す。
+    区切り文字は / か - を許容。月・日はゼロ埋めなしでも受け付ける。
+    不正な入力の場合は None を返す。
+    """
+    normalized = value.strip().replace("-", "/")
+
+    parts = normalized.split("/")
+    if len(parts) != 3:
+        return None
+
+    try:
+        year, month, day = int(parts[0]), int(parts[1]), int(parts[2])
+    except ValueError:
+        return None
+
+    # ゼロ埋めして strptime で存在チェック
+    date_str = f"{year:04d}/{month:02d}/{day:02d}"
+    try:
+        datetime.strptime(date_str, "%Y/%m/%d")
+    except ValueError:
+        return None
+
+    return date_str
 
 
 # --- Embed生成ヘルパー ---
@@ -22,7 +50,7 @@ def _build_application_embed(
     embed.add_field(
         name="👤 申請者", value=f"{applicant} (`{applicant.id}`)", inline=False
     )
-    embed.add_field(name="📅 申請期間", value=period, inline=True)
+    embed.add_field(name="📅 申請日", value=period, inline=True)
     embed.add_field(name="📝 申請理由", value=reason, inline=False)
     embed.set_thumbnail(url=applicant.display_avatar.url)
     embed.set_footer(text="下のボタンで申請を審査してください")
@@ -48,7 +76,7 @@ def _build_reviewed_embed(
     embed.add_field(
         name="👤 申請者", value=f"{applicant} (`{applicant.id}`)", inline=False
     )
-    embed.add_field(name="📅 申請期間", value=period, inline=True)
+    embed.add_field(name="📅 申請日", value=period, inline=True)
     embed.add_field(name="📝 申請理由", value=reason, inline=False)
     embed.add_field(
         name="🔎 審査者", value=f"{reviewer} (`{reviewer.id}`)", inline=False
@@ -101,7 +129,7 @@ class ReviewView(View):
                     description=(
                         f"**{role.name}** のロール申請が承認されました！\n\n"
                         f"📝 申請理由: {self.reason}\n"
-                        f"📅 申請期間: {self.period}"
+                        f"📅 申請日: {self.period}"
                     ),
                     color=discord.Color.green(),
                 )
@@ -132,7 +160,7 @@ class ReviewView(View):
                     description=(
                         "ステージコーディネーターのロール申請は却下されました。\n\n"
                         f"📝 申請理由: {self.reason}\n"
-                        f"📅 申請期間: {self.period}\n\n"
+                        f"📅 申請日: {self.period}\n\n"
                         "詳細については管理者にお問い合わせください。"
                     ),
                     color=discord.Color.red(),
@@ -161,11 +189,11 @@ class ApplicationModal(Modal, title="ステージコーディネーター申請"
         max_length=300,
     )
     period = TextInput(
-        label="申請期間",
+        label="申請日",
         style=discord.TextStyle.short,
-        placeholder="例: 2024年4月〜2025年9月",
+        placeholder="例: 2025/4/1 または 2025-04-01",
         required=True,
-        max_length=100,
+        max_length=20,
     )
 
     async def on_submit(self, interaction: discord.Interaction):
@@ -193,6 +221,17 @@ class ApplicationModal(Modal, title="ステージコーディネーター申請"
             )
             return
 
+        # 日付の正規化・バリデーション
+        normalized_period = _normalize_date(self.period.value)
+        if normalized_period is None:
+            await interaction.response.send_message(
+                "❌ 申請日の形式が正しくありません。\n"
+                "年/月/日 または 年-月-日 の形式で入力してください。\n"
+                "例: `2025/4/1` `2025/04/01` `2025-4-1`",
+                ephemeral=True,
+            )
+            return
+
         # 審査チャンネルを取得し、テキスト系チャンネルに絞り込む
         raw_channel = interaction.guild.get_channel(REVIEW_CHANNEL_ID)
         if not isinstance(
@@ -213,12 +252,12 @@ class ApplicationModal(Modal, title="ステージコーディネーター申請"
         embed = _build_application_embed(
             applicant=member,
             reason=self.reason.value,
-            period=self.period.value,
+            period=normalized_period,
         )
         view = ReviewView(
             applicant=member,
             reason=self.reason.value,
-            period=self.period.value,
+            period=normalized_period,
         )
         await review_channel.send(embed=embed, view=view)
 
