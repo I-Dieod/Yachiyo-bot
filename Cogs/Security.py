@@ -29,7 +29,7 @@ class Security(commands.Cog):
     async def cog_load(self):
         """Cogが読み込まれた時にデータベースを初期化"""
         try:
-            if not db_manager.conn:
+            if not db_manager.pool:
                 await db_manager.create_pool()
                 await db_manager.initialize_tables()
                 logger.info("Database initialized for Security cog")

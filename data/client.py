@@ -4,8 +4,6 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 import asyncpg
-import psycopg2
-from psycopg2.extensions import connection
 
 from . import user_join as _user_join
 
@@ -14,44 +12,45 @@ logger = logging.getLogger(__name__)
 
 class DatabaseManager:
     def __init__(self):
-        self.conn: Optional[connection] = None
+        self.pool: Optional[asyncpg.Pool] = None
 
-        # Railway provides multiple database URL options
+        # Supabase / Railway の DATABASE_URL を優先
         self.database_url = os.getenv("DATABASE_URL") or os.getenv(
             "DATABASE_PUBLIC_URL"
         )
 
-        # Fallback to individual Railway environment variables if DATABASE_URL is not set
         if not self.database_url:
-            host = os.getenv("PGHOST")
-            port = os.getenv("PGPORT", "5432")
-            database = os.getenv("PGDATABASE", "railway")
-            user = os.getenv("PGUSER", "postgres")
-            password = os.getenv("PGPASSWORD")
-
-            # Additional fallback to legacy environment variables
-            if not all([host, user, password]):
-                host = host or os.getenv("DB_HOST")
-                port = port or os.getenv("DB_PORT", "5432")
-                database = database or os.getenv("DB_NAME", "railway")
-                user = user or os.getenv("DB_USER", "postgres")
-                password = password or os.getenv("DB_PASSWORD")
+            host = os.getenv("PGHOST") or os.getenv("DB_HOST")
+            port = os.getenv("PGPORT") or os.getenv("DB_PORT", "5432")
+            database = os.getenv("PGDATABASE") or os.getenv("DB_NAME", "postgres")
+            user = os.getenv("PGUSER") or os.getenv("DB_USER", "postgres")
+            password = os.getenv("PGPASSWORD") or os.getenv("DB_PASSWORD")
 
             if all([host, user, password]):
-                self.database_url = f"postgresql://{user}:{password}@{host}:{port}/{database}?sslmode=require"
+                self.database_url = (
+                    f"postgresql://{user}:{password}@{host}:{port}/{database}"
+                    f"?sslmode=require"
+                )
 
     async def create_pool(self):
         """データベース接続プールを作成"""
         try:
-            self.conn = psycopg2.connect(self.database_url)
+            self.pool = await asyncpg.create_pool(
+                self.database_url,
+                min_size=1,
+                max_size=5,
+                ssl="require",
+            )
+            logger.info("Database connection pool created successfully")
         except Exception as e:
-            print(f"Failed to create database connection pool: {e}")
+            logger.error(f"Failed to create database connection pool: {e}")
             raise
 
     async def close_pool(self):
         """データベース接続プールを閉じる"""
-        if self.conn:
-            self.conn.close()
+        if self.pool:
+            await self.pool.close()
+            self.pool = None
             logger.info("Database connection pool closed")
 
     async def initialize_tables(self):
