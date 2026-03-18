@@ -286,6 +286,9 @@ class StageEvent(commands.Cog):
 
     @commands.command()
     async def role(self, ctx: commands.Context):
+        if not (ctx.author.id == 1383504941200703539):
+            pass
+
         embed = discord.Embed(
             title="ステージコーディネーターロール🎲の申請",
             description=(
