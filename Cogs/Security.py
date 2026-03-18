@@ -6,7 +6,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from database import db_manager
+from data.client import db_manager
 
 from .checkDiffSpam import CheckDiffSpam
 
