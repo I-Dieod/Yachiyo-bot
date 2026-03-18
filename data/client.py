@@ -4,6 +4,8 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 import asyncpg
+import psycopg2
+from psycopg2.extensions import connection
 
 from . import user_join as _user_join
 
@@ -12,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 class DatabaseManager:
     def __init__(self):
-        self.pool: Optional[asyncpg.Pool] = None
+        self.conn: Optional[connection] = None
 
         # Railway provides multiple database URL options
         self.database_url = os.getenv("DATABASE_URL") or os.getenv(
@@ -40,46 +42,16 @@ class DatabaseManager:
 
     async def create_pool(self):
         """データベース接続プールを作成"""
-        if not self.database_url:
-            raise ValueError(
-                "Database connection string not found. Please set DATABASE_URL, DATABASE_PUBLIC_URL, or individual PG* environment variables."
-            )
-
         try:
-            safe_url = self.database_url
-            if "@" in safe_url:
-                parts = safe_url.split("@")
-                user_part = parts[0].split(":")
-                if len(user_part) >= 3:
-                    user_part[2] = "***"
-                safe_url = ":".join(user_part) + "@" + parts[1]
-
-            logger.info(f"Attempting to connect to database: {safe_url}")
-
-            self.pool = await asyncpg.create_pool(
-                self.database_url,
-                min_size=1,
-                max_size=10,
-                command_timeout=60,
-                server_settings={"application_name": "yachiyo_bot"},
-            )
-            logger.info("Database connection pool created successfully")
-
-            async with self.pool.acquire() as connection:
-                result = await connection.fetchval("SELECT version()")
-                logger.info(f"Connected to PostgreSQL: {result}")
-
+            self.conn = psycopg2.connect(self.database_url)
         except Exception as e:
-            logger.error(f"Failed to create database connection pool: {e}")
-            logger.error(
-                f"Connection URL format: {safe_url if 'safe_url' in locals() else 'Unable to parse URL'}"
-            )
+            print(f"Failed to create database connection pool: {e}")
             raise
 
     async def close_pool(self):
         """データベース接続プールを閉じる"""
-        if self.pool:
-            await self.pool.close()
+        if self.conn:
+            self.conn.close()
             logger.info("Database connection pool closed")
 
     async def initialize_tables(self):
