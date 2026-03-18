@@ -105,7 +105,8 @@ class DatabaseManager:
             id SERIAL PRIMARY KEY,
             user_id BIGINT NOT NULL,
             username VARCHAR(255),
-            display_name VARCHAR(255)
+            display_name VARCHAR(255),
+            UNIQUE(user_id)
         );
 
         CREATE TABLE IF NOT EXISTS fuju_balances (
@@ -122,7 +123,8 @@ class DatabaseManager:
             item_type VARCHAR(50),
             duration_days INTEGER,
             stock INTEGER DEFAULT -1,
-            is_active BOOLEAN DEFAULT true
+            is_active BOOLEAN DEFAULT true,
+             UNIQUE(item_id)
         );
 
         CREATE TABLE IF NOT EXISTS fuju_transactions (
