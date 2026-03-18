@@ -40,6 +40,7 @@ class DatabaseManager:
                 min_size=1,
                 max_size=5,
                 ssl="require",
+                statement_cache_size=0,
             )
             logger.info("Database connection pool created successfully")
         except Exception as e:
