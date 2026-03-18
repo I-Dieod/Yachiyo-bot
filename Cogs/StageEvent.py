@@ -274,7 +274,7 @@ class RoleButton(Button):
 class ButtonList(View):
     def __init__(self, review_channel_id: int):
         super().__init__(timeout=None)
-        for role_name in ["Unity", "UI Design", "FrontEnd", "BackEnd"]:
+        for role_name in ["申請する"]:
             self.add_item(RoleButton(role_name, review_channel_id))
 
 
