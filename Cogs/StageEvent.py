@@ -232,6 +232,18 @@ class ApplicationModal(Modal, title="ステージコーディネーター申請"
             )
             return
 
+        # 申請日がインタラクション日時より未来かチェック
+        applied_date = datetime.strptime(normalized_period, "%Y/%m/%d")
+        today = interaction.created_at.replace(
+            hour=0, minute=0, second=0, microsecond=0, tzinfo=None
+        )
+        if applied_date <= today:
+            await interaction.response.send_message(
+                "❌ 申請日は本日より後の日付を入力してください。",
+                ephemeral=True,
+            )
+            return
+
         # 審査チャンネルを取得し、テキスト系チャンネルに絞り込む
         raw_channel = interaction.guild.get_channel(REVIEW_CHANNEL_ID)
         if not isinstance(
