@@ -1,18 +1,17 @@
-import os
 from typing import Union
 
 import discord
 from discord.ext import commands
 from discord.ui import Button, Modal, TextInput, View
 
-# 審査チャンネルのID（環境変数から取得）
+# 審査チャンネルのID
 REVIEW_CHANNEL_ID = 1483869724482998383  # ステージコーディネート申請
-apply_role = 1483867597777928362  # ステージコーディネーター
+APPLY_ROLE_ID = 1483867597777928362  # ステージコーディネーター
 
 
 # --- Embed生成ヘルパー ---
 def _build_application_embed(
-    applicant: discord.Member, role_name: str, reason: str, period: str
+    applicant: discord.Member, reason: str, period: str
 ) -> discord.Embed:
     """審査チャンネルに送信する申請Embedを生成する"""
     embed = discord.Embed(
@@ -23,7 +22,6 @@ def _build_application_embed(
     embed.add_field(
         name="👤 申請者", value=f"{applicant} (`{applicant.id}`)", inline=False
     )
-    embed.add_field(name="🏷️ 申請ロール", value=role_name, inline=True)
     embed.add_field(name="📅 申請期間", value=period, inline=True)
     embed.add_field(name="📝 申請理由", value=reason, inline=False)
     embed.set_thumbnail(url=applicant.display_avatar.url)
@@ -33,7 +31,6 @@ def _build_application_embed(
 
 def _build_reviewed_embed(
     applicant: discord.Member,
-    role_name: str,
     reason: str,
     period: str,
     reviewer: Union[discord.Member, discord.User],
@@ -44,14 +41,13 @@ def _build_reviewed_embed(
     color = discord.Color.green() if approved else discord.Color.red()
 
     embed = discord.Embed(
-        title=f"📋 ロール申請 — {status_label}",
+        title=f"📋 コーディネーターロール申請 — {status_label}",
         description=f"**{applicant.mention}** さんの申請は **{status_label}** されました。",
         color=color,
     )
     embed.add_field(
         name="👤 申請者", value=f"{applicant} (`{applicant.id}`)", inline=False
     )
-    embed.add_field(name="🏷️ 申請ロール", value=role_name, inline=True)
     embed.add_field(name="📅 申請期間", value=period, inline=True)
     embed.add_field(name="📝 申請理由", value=reason, inline=False)
     embed.add_field(
@@ -63,18 +59,11 @@ def _build_reviewed_embed(
 
 # --- 許可/却下ボタンのView ---
 class ReviewView(View):
-    """申請審査用のView（許可・却下ボタン）。申請者情報とロール名を保持する。"""
+    """申請審査用のView（許可・却下ボタン）"""
 
-    def __init__(
-        self,
-        applicant: discord.Member,
-        role_name: str,
-        reason: str,
-        period: str,
-    ):
-        super().__init__(timeout=None)  # ボットが再起動しても動作するようにtimeout=None
+    def __init__(self, applicant: discord.Member, reason: str, period: str):
+        super().__init__(timeout=None)
         self.applicant = applicant
-        self.role_name = role_name
         self.reason = reason
         self.period = period
 
@@ -89,21 +78,18 @@ class ReviewView(View):
             )
             return
 
-        role = discord.utils.get(interaction.guild.roles, name=self.role_name)
+        role = interaction.guild.get_role(APPLY_ROLE_ID)
         if role is None:
             await interaction.response.send_message(
-                f"❌ ロール `{self.role_name}` が見つかりませんでした。",
-                ephemeral=True,
+                "❌ 対象ロールが見つかりませんでした。", ephemeral=True
             )
             return
 
-        # ロールを付与
         try:
             await self.applicant.add_roles(role)
         except discord.Forbidden:
             await interaction.response.send_message(
-                "❌ ロール付与の権限がありません。",
-                ephemeral=True,
+                "❌ ロール付与の権限がありません。", ephemeral=True
             )
             return
 
@@ -113,7 +99,7 @@ class ReviewView(View):
                 embed=discord.Embed(
                     title="✅ ロール申請が許可されました",
                     description=(
-                        f"**{self.role_name}** のロール申請が承認されました！\n\n"
+                        f"**{role.name}** のロール申請が承認されました！\n\n"
                         f"📝 申請理由: {self.reason}\n"
                         f"📅 申請期間: {self.period}"
                     ),
@@ -123,10 +109,8 @@ class ReviewView(View):
         except discord.Forbidden:
             pass  # DMが送れない場合はスキップ
 
-        # Embedを更新して操作済みにする
         approved_embed = _build_reviewed_embed(
             applicant=self.applicant,
-            role_name=self.role_name,
             reason=self.reason,
             period=self.period,
             reviewer=interaction.user,
@@ -146,7 +130,7 @@ class ReviewView(View):
                 embed=discord.Embed(
                     title="❌ ロール申請が却下されました",
                     description=(
-                        f"**{self.role_name}** のロール申請は却下されました。\n\n"
+                        "ステージコーディネーターのロール申請は却下されました。\n\n"
                         f"📝 申請理由: {self.reason}\n"
                         f"📅 申請期間: {self.period}\n\n"
                         "詳細については管理者にお問い合わせください。"
@@ -157,10 +141,8 @@ class ReviewView(View):
         except discord.Forbidden:
             pass  # DMが送れない場合はスキップ
 
-        # Embedを更新して操作済みにする
         rejected_embed = _build_reviewed_embed(
             applicant=self.applicant,
-            role_name=self.role_name,
             reason=self.reason,
             period=self.period,
             reviewer=interaction.user,
@@ -170,7 +152,7 @@ class ReviewView(View):
 
 
 # --- モーダル定義 ---
-class ApplicationModal(Modal, title="ロール申請"):
+class ApplicationModal(Modal, title="ステージコーディネーター申請"):
     reason = TextInput(
         label="申請理由",
         style=discord.TextStyle.paragraph,
@@ -186,11 +168,6 @@ class ApplicationModal(Modal, title="ロール申請"):
         max_length=100,
     )
 
-    def __init__(self, role_name: str, review_channel_id: int):
-        super().__init__()
-        self.role_name = role_name
-        self.review_channel_id = review_channel_id
-
     async def on_submit(self, interaction: discord.Interaction):
         if interaction.guild is None:
             await interaction.response.send_message(
@@ -205,19 +182,19 @@ class ApplicationModal(Modal, title="ロール申請"):
             )
             return
 
-        role = discord.utils.get(interaction.guild.roles, name=self.role_name)
+        role = interaction.guild.get_role(APPLY_ROLE_ID)
 
         # 既にロールを所持している場合は除去フロー
         if role is not None and role in member.roles:
             await member.remove_roles(role)
             await interaction.response.send_message(
-                f"**{self.role_name}** のロールを除去しました。",
+                "**ステージコーディネーター** のロールを除去しました。",
                 ephemeral=True,
             )
             return
 
         # 審査チャンネルを取得し、テキスト系チャンネルに絞り込む
-        raw_channel = interaction.guild.get_channel(self.review_channel_id)
+        raw_channel = interaction.guild.get_channel(REVIEW_CHANNEL_ID)
         if not isinstance(
             raw_channel,
             (discord.TextChannel, discord.Thread, discord.VoiceChannel),
@@ -235,13 +212,11 @@ class ApplicationModal(Modal, title="ロール申請"):
         # 申請Embedを審査チャンネルに送信
         embed = _build_application_embed(
             applicant=member,
-            role_name=self.role_name,
             reason=self.reason.value,
             period=self.period.value,
         )
         view = ReviewView(
             applicant=member,
-            role_name=self.role_name,
             reason=self.reason.value,
             period=self.period.value,
         )
@@ -249,54 +224,41 @@ class ApplicationModal(Modal, title="ロール申請"):
 
         # 申請者に受付完了を通知（ephemeral）
         await interaction.response.send_message(
-            f"✅ **{self.role_name}** への申請を受け付けました！\n"
+            "✅ **ステージコーディネーター** への申請を受け付けました！\n"
             "審査が完了次第、DMでお知らせします。",
             ephemeral=True,
         )
 
 
-# --- ボタン定義（共通化） ---
-class RoleButton(Button):
-    def __init__(self, role_name: str, review_channel_id: int):
-        super().__init__(label=role_name, style=discord.ButtonStyle.primary)
-        self.role_name = role_name
-        self.review_channel_id = review_channel_id
-
-    async def callback(self, interaction: discord.Interaction):
-        modal = ApplicationModal(
-            role_name=self.role_name,
-            review_channel_id=self.review_channel_id,
-        )
-        await interaction.response.send_modal(modal)
-
-
-# --- View定義 ---
-class ButtonList(View):
-    def __init__(self, review_channel_id: int):
+# --- 申請ボタンView ---
+class ApplyView(View):
+    def __init__(self):
         super().__init__(timeout=None)
-        for role_name in ["申請する"]:
-            self.add_item(RoleButton(role_name, review_channel_id))
+
+    @discord.ui.button(
+        label="申請する",
+        style=discord.ButtonStyle.primary,
+        custom_id="apply_coordinator",
+    )
+    async def apply(self, interaction: discord.Interaction, button: Button):
+        await interaction.response.send_modal(ApplicationModal())
 
 
 # --- Cog ---
 class StageEvent(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-        self.review_channel_id = REVIEW_CHANNEL_ID
 
     @commands.command()
     async def role(self, ctx: commands.Context):
-        if not (ctx.author.id == 1383504941200703539):
-            pass
-
         embed = discord.Embed(
-            title="ステージコーディネーターロール🎲の申請",
+            title="ステージコーディネーター申請🎙️",
             description=(
-                "ステージ利用を可能にする”ステージコーディネーター”ロールを申請できます。\n"
+                "ステージ利用を可能にする **ステージコーディネーター** ロールを申請できます。\n"
                 "申請希望者は以下のボタンを押して、申請期間および申請理由を記入してください。\n"
             ),
         )
-        view = ButtonList(self.review_channel_id)
+        view = ApplyView()
         await ctx.send(embed=embed, view=view)
 
 
