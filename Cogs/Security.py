@@ -36,8 +36,14 @@ class Security(commands.Cog):
         except Exception as e:
             logger.error(f"Failed to initialize database for Security cog: {e}")
 
+        self.expire_users_after1D.start()
+        logger.info("expire_users_after1D task started")
+
     async def cog_unload(self):
         """Cogがアンロードされる時にデータベース接続を閉じる"""
+        self.expire_users_after1D.cancel()
+        logger.info("expire_users_after1D task cancelled")
+
         try:
             await db_manager.close_pool()
             logger.info("Database connection closed for Security cog")
@@ -58,15 +64,12 @@ class Security(commands.Cog):
         try:
             await db_manager.save_user_join(
                 user_id=member.id,
-                guild_id=member.guild.id,
                 join_time=join_time,
                 username=member.name,
                 display_name=member.display_name,
                 global_name=member.global_name,
             )
-            logger.info(
-                f"User join saved to database: {member.id} in guild {member.guild.id}"
-            )
+            logger.info(f"User join saved to database: {member.id}")
         except Exception as e:
             logger.error(f"Failed to save user join to database: {e}")
 
@@ -151,7 +154,7 @@ class Security(commands.Cog):
             user_id = ctx.author.id
 
         try:
-            join_info = await db_manager.get_user_join_info(user_id, ctx.guild.id)
+            join_info = await db_manager.get_user_join_info(user_id)
             if join_info:
                 join_time = join_info["join_time"]
                 formatted_time = join_time.strftime("%Y年%m月%d日 %H:%M:%S")
@@ -182,7 +185,7 @@ class Security(commands.Cog):
     async def join_stats(self, ctx):
         """サーバーの参加統計を表示"""
         try:
-            total_count = await db_manager.get_user_join_count(ctx.guild.id)
+            total_count = await db_manager.get_user_join_count()
 
             embed = discord.Embed(title="参加統計", color=0x0099FF)
             embed.add_field(name="総参加記録数", value=f"{total_count}件", inline=False)
@@ -218,9 +221,7 @@ class Security(commands.Cog):
     async def delete_user_joins(self, ctx, user_id: int):
         """特定ユーザーの参加記録を削除（管理者のみ）"""
         try:
-            deleted_count = await db_manager.delete_user_join_records(
-                user_id, ctx.guild.id
-            )
+            deleted_count = await db_manager.delete_user_join_records(user_id)
             await ctx.send(
                 f"ユーザー <@{user_id}> の参加記録を{deleted_count}件削除しました。"
             )
@@ -229,8 +230,22 @@ class Security(commands.Cog):
             await ctx.send("記録削除中にエラーが発生しました。")
 
     @tasks.loop(hours=1)
-    async def expire_users_after1D():
-        pass
+    async def expire_users_after1D(self):
+        """1時間ごとにDBをチェックし、join_timeが1日を超えたレコードを削除する"""
+        try:
+            deleted_count = await db_manager.delete_expired_joins()
+            if deleted_count > 0:
+                logger.info(
+                    f"expire_users_after1D: {deleted_count}件の期限切れレコードを削除しました"
+                )
+            else:
+                logger.debug(
+                    "expire_users_after1D: 削除対象のレコードはありませんでした"
+                )
+        except Exception as e:
+            logger.error(
+                f"expire_users_after1D: レコード削除中にエラーが発生しました: {e}"
+            )
 
     @commands.command()
     @commands.has_permissions(administrator=True)
@@ -253,7 +268,7 @@ class Security(commands.Cog):
 
                 # Test record count
                 record_count = await connection.fetchval(
-                    "SELECT COUNT(*) FROM user_joins WHERE guild_id = $1", ctx.guild.id
+                    "SELECT COUNT(*) FROM user_joins"
                 )
 
                 embed = discord.Embed(title="データベース接続テスト", color=0x00FF00)
@@ -268,9 +283,7 @@ class Security(commands.Cog):
                     value="✅ 存在" if table_exists else "❌ 存在しない",
                     inline=True,
                 )
-                embed.add_field(
-                    name="このサーバーの記録数", value=f"{record_count}件", inline=True
-                )
+                embed.add_field(name="総記録数", value=f"{record_count}件", inline=True)
 
                 await ctx.send(embed=embed)
 
