@@ -7,7 +7,7 @@ from aiohttp import web
 from discord.ext import commands
 from dotenv import load_dotenv
 
-from database import db_manager
+from data.client import db_manager
 
 load_dotenv()
 
