@@ -4,7 +4,7 @@ from datetime import datetime
 
 import discord
 from discord import app_commands
-from discord.ext import commands
+from discord.ext import commands, tasks
 
 from data.client import db_manager
 
@@ -29,7 +29,7 @@ class Security(commands.Cog):
     async def cog_load(self):
         """Cogが読み込まれた時にデータベースを初期化"""
         try:
-            if not db_manager.pool:
+            if not db_manager.conn:
                 await db_manager.create_pool()
                 await db_manager.initialize_tables()
                 logger.info("Database initialized for Security cog")
@@ -227,6 +227,10 @@ class Security(commands.Cog):
         except Exception as e:
             logger.error(f"Failed to delete user join records: {e}")
             await ctx.send("記録削除中にエラーが発生しました。")
+
+    @tasks.loop(hours=1)
+    async def expire_users_after1D():
+        pass
 
     @commands.command()
     @commands.has_permissions(administrator=True)
