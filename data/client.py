@@ -60,17 +60,15 @@ class DatabaseManager:
         CREATE TABLE IF NOT EXISTS user_joins (
             id SERIAL PRIMARY KEY,
             user_id BIGINT NOT NULL,
-            guild_id BIGINT NOT NULL,
             join_time TIMESTAMP WITH TIME ZONE NOT NULL,
             username VARCHAR(255),
             display_name VARCHAR(255),
             global_name VARCHAR(255),
             created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-            UNIQUE(user_id, guild_id, join_time)
+            UNIQUE(user_id, join_time)
         );
 
-        CREATE INDEX IF NOT EXISTS idx_user_joins_user_guild ON user_joins(user_id, guild_id);
-        CREATE INDEX IF NOT EXISTS idx_user_joins_guild_time ON user_joins(guild_id, join_time DESC);
+        CREATE INDEX IF NOT EXISTS idx_user_joins_user ON user_joins(user_id);
         CREATE INDEX IF NOT EXISTS idx_user_joins_time ON user_joins(join_time DESC);
 
         CREATE TABLE IF NOT EXISTS fuju_users (
@@ -138,7 +136,6 @@ class DatabaseManager:
     async def save_user_join(
         self,
         user_id: int,
-        guild_id: int,
         join_time: datetime,
         username: str = None,
         display_name: str = None,
@@ -146,40 +143,38 @@ class DatabaseManager:
     ):
         """ユーザーの参加情報をデータベースに保存"""
         return await _user_join.save_user_join(
-            self.pool, user_id, guild_id, join_time, username, display_name, global_name
+            self.pool, user_id, join_time, username, display_name, global_name
         )
 
-    async def get_user_join_info(
-        self, user_id: int, guild_id: int
-    ) -> Optional[Dict[str, Any]]:
+    async def get_user_join_info(self, user_id: int) -> Optional[Dict[str, Any]]:
         """ユーザーの最新の参加情報を取得"""
-        return await _user_join.get_user_join_info(self.pool, user_id, guild_id)
+        return await _user_join.get_user_join_info(self.pool, user_id)
 
-    async def get_recent_joins(
-        self, guild_id: int, limit: int = 10
-    ) -> List[Dict[str, Any]]:
-        """指定されたギルドの最近の参加者を取得"""
-        return await _user_join.get_recent_joins(self.pool, guild_id, limit)
+    async def get_recent_joins(self, limit: int = 10) -> List[Dict[str, Any]]:
+        """最近の参加者を取得"""
+        return await _user_join.get_recent_joins(self.pool, limit)
 
-    async def get_user_join_count(self, guild_id: int) -> int:
-        """指定されたギルドの総参加記録数を取得"""
-        return await _user_join.get_user_join_count(self.pool, guild_id)
+    async def get_user_join_count(self) -> int:
+        """総参加記録数を取得"""
+        return await _user_join.get_user_join_count(self.pool)
 
     async def get_joins_by_date_range(
-        self, guild_id: int, start_date: datetime, end_date: datetime
+        self, start_date: datetime, end_date: datetime
     ) -> List[Dict[str, Any]]:
         """指定された期間の参加者を取得"""
-        return await _user_join.get_joins_by_date_range(
-            self.pool, guild_id, start_date, end_date
-        )
+        return await _user_join.get_joins_by_date_range(self.pool, start_date, end_date)
 
-    async def delete_user_join_records(self, user_id: int, guild_id: int) -> int:
+    async def delete_user_join_records(self, user_id: int) -> int:
         """ユーザーの参加記録を削除（管理用）"""
-        return await _user_join.delete_user_join_records(self.pool, user_id, guild_id)
+        return await _user_join.delete_user_join_records(self.pool, user_id)
 
     async def cleanup_old_records(self, days: int = 90) -> int:
         """古い記録をクリーンアップ（オプション）"""
         return await _user_join.cleanup_old_records(self.pool, days)
+
+    async def delete_expired_joins(self) -> int:
+        """join_time が1日を超えたレコードを削除する"""
+        return await _user_join.delete_expired_joins(self.pool)
 
 
 # グローバルなデータベースマネージャーインスタンス
