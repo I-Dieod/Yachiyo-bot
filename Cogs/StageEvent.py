@@ -1,8 +1,8 @@
-from datetime import datetime
+from datetime import date, datetime
 from typing import Optional, Union
 
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 from discord.ui import Button, Modal, TextInput, View
 
 from data.client import db_manager
@@ -245,9 +245,9 @@ class ApplicationModal(Modal, title="ステージコーディネーター申請"
         today = interaction.created_at.replace(
             hour=0, minute=0, second=0, microsecond=0, tzinfo=None
         )
-        if applied_date <= today:
+        if applied_date < today:
             await interaction.response.send_message(
-                "❌ 申請日は本日より後の日付を入力してください。",
+                "❌ 申請日は本日以降の日付を入力してください。",
                 ephemeral=True,
             )
             return
@@ -307,6 +307,65 @@ class ApplyView(View):
 class StageEvent(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
+        self.check_role_schedule.start()
+
+    async def cog_unload(self):
+        self.check_role_schedule.cancel()
+
+    @tasks.loop(hours=24)
+    async def check_role_schedule(self):
+        """
+        毎日0時（JST）に実行:
+        - applied_period が今日のレコード → ロールを付与
+        - applied_period が今日より前のレコード → ロールを除去してDBから削除
+        """
+        today = date.today()
+        guild = discord.utils.get(self.bot.guilds)
+        if guild is None:
+            return
+
+        role = guild.get_role(APPLY_ROLE_ID)
+        if role is None:
+            return
+
+        # 当日分: ロールを付与
+        due_records = await db_manager.get_due_records(today)
+        for record in due_records:
+            member = guild.get_member(record["user_id"])
+            if member is None:
+                continue
+            if role not in member.roles:
+                try:
+                    await member.add_roles(role)
+                except discord.Forbidden:
+                    pass
+
+        # 期限切れ分: ロールを除去してDBから削除
+        expired_records = await db_manager.get_due_records_before(today)
+        for record in expired_records:
+            member = guild.get_member(record["user_id"])
+            if member is not None and role in member.roles:
+                try:
+                    await member.remove_roles(role)
+                except discord.Forbidden:
+                    pass
+        await db_manager.delete_expired_records(today)
+
+    @check_role_schedule.before_loop
+    async def before_check_role_schedule(self):
+        """ボット起動完了を待ち、次の0時(JST)まで待機してからループを開始する"""
+        import asyncio
+        from datetime import timedelta, timezone
+
+        await self.bot.wait_until_ready()
+
+        JST = timezone(timedelta(hours=9))
+        now = datetime.now(JST)
+        next_midnight = (now + timedelta(days=1)).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+        wait_seconds = (next_midnight - now).total_seconds()
+        await asyncio.sleep(wait_seconds)
 
     @commands.command()
     async def role(self, ctx: commands.Context):
