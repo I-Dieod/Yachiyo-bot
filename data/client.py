@@ -1,6 +1,6 @@
 import logging
 import os
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, Dict, List, Optional
 
 import asyncpg
@@ -200,6 +200,18 @@ class DatabaseManager:
             display_name,
             applied_date,
         )
+
+    async def get_due_records(self, today: date) -> list:
+        """applied_period が today と一致するレコードを取得"""
+        return await _stage_event.get_due_records(self.pool, today)
+
+    async def get_due_records_before(self, today: date) -> list:
+        """applied_period が today より前のレコードを取得"""
+        return await _stage_event.get_records_before(self.pool, today)
+
+    async def delete_expired_records(self, today: date) -> int:
+        """applied_period が today より前のレコードを削除"""
+        return await _stage_event.delete_expired_records(self.pool, today)
 
 
 # グローバルなデータベースマネージャーインスタンス
