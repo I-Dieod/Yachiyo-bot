@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Optional
 
 import asyncpg
 
+from . import stage_event as _stage_event
 from . import user_join as _user_join
 
 logger = logging.getLogger(__name__)
@@ -71,6 +72,13 @@ class DatabaseManager:
         CREATE INDEX IF NOT EXISTS idx_user_joins_user ON user_joins(user_id);
         CREATE INDEX IF NOT EXISTS idx_user_joins_time ON user_joins(join_time DESC);
 
+        CREATE TABLE IF NOT EXISTS apply_stage_coordinate (
+            id SERIAL PRIMARY KEY,
+            user_id BIGINT NOT NULL,
+            username VARCHAR(255),
+            display_name VARCHAR(255),
+            applied_period TIMESTAMP
+        )
         CREATE TABLE IF NOT EXISTS fuju_users (
             id SERIAL PRIMARY KEY,
             user_id BIGINT NOT NULL,
@@ -175,6 +183,22 @@ class DatabaseManager:
     async def delete_expired_joins(self) -> int:
         """join_time が1日を超えたレコードを削除する"""
         return await _user_join.delete_expired_joins(self.pool)
+
+    # --- stage_event wrappers ---
+    async def save_applied_period(
+        self,
+        user_id: int,
+        username: str = None,
+        display_name: str,
+        applied_date: datetime,
+    ):
+        return await _stage_event.save_applied_period(
+            self.pool,
+            user_id,
+            user_name,
+            display_name,
+            applied_date,
+        )
 
 
 # グローバルなデータベースマネージャーインスタンス
