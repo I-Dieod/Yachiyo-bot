@@ -189,13 +189,13 @@ class DatabaseManager:
         self,
         user_id: int,
         username: str = None,
-        display_name: str,
-        applied_date: datetime,
+        display_name: str = None,
+        applied_date: datetime = None,
     ):
         return await _stage_event.save_applied_period(
             self.pool,
             user_id,
-            user_name,
+            username,
             display_name,
             applied_date,
         )
