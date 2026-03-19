@@ -5,6 +5,8 @@ import discord
 from discord.ext import commands
 from discord.ui import Button, Modal, TextInput, View
 
+from data.client import db_manager
+
 # 審査チャンネルのID
 REVIEW_CHANNEL_ID = 1483869724482998383  # ステージコーディネート申請
 APPLY_ROLE_ID = 1483867597777928362  # ステージコーディネーター
@@ -115,6 +117,12 @@ class ReviewView(View):
 
         try:
             await self.applicant.add_roles(role)
+            await db_manager.save_applied_period(
+                self.applicant.id,
+                self.applicant.name,
+                self.applicant.display_name,
+                datetime.strptime(self.period, "%Y/%m/%d"),
+            )
         except discord.Forbidden:
             await interaction.response.send_message(
                 "❌ ロール付与の権限がありません。", ephemeral=True
