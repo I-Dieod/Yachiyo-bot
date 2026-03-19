@@ -115,17 +115,29 @@ class ReviewView(View):
             )
             return
 
+        applied_date = datetime.strptime(self.period, "%Y/%m/%d")
+        today = interaction.created_at.replace(
+            hour=0, minute=0, second=0, microsecond=0, tzinfo=None
+        )
+
         try:
-            await self.applicant.add_roles(role)
             await db_manager.save_applied_period(
                 self.applicant.id,
                 self.applicant.name,
                 self.applicant.display_name,
-                datetime.strptime(self.period, "%Y/%m/%d"),
+                applied_date,
             )
+            # 申請日が当日であれば即時付与
+            if applied_date == today:
+                await self.applicant.add_roles(role)
         except discord.Forbidden:
             await interaction.response.send_message(
                 "❌ ロール付与の権限がありません。", ephemeral=True
+            )
+            return
+        except Exception:
+            await interaction.response.send_message(
+                "❌ DB保存に失敗しました。", ephemeral=True
             )
             return
 
@@ -328,7 +340,7 @@ class StageEvent(commands.Cog):
         if role is None:
             return
 
-        # 当日分: ロールを付与
+        # 当日分: ロールを付与（未付与の場合のみ）
         due_records = await db_manager.get_due_records(today)
         for record in due_records:
             member = guild.get_member(record["user_id"])
@@ -340,7 +352,7 @@ class StageEvent(commands.Cog):
                 except discord.Forbidden:
                     pass
 
-        # 期限切れ分: ロールを除去してDBから削除
+        # 期限切れ分（< today）: ロールを除去してDBから削除
         expired_records = await db_manager.get_due_records_before(today)
         for record in expired_records:
             member = guild.get_member(record["user_id"])
