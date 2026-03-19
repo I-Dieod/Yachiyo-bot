@@ -78,7 +78,8 @@ class DatabaseManager:
             username VARCHAR(255),
             display_name VARCHAR(255),
             applied_period TIMESTAMP
-        )
+        );
+
         CREATE TABLE IF NOT EXISTS fuju_users (
             id SERIAL PRIMARY KEY,
             user_id BIGINT NOT NULL,
