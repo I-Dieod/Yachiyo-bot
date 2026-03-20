@@ -3,13 +3,11 @@ from difflib import SequenceMatcher
 
 import discord
 
-log_ch = 1478490523592560681  # 超かぐや姫！ファンサーバー server-log
-
 
 class CheckDiffSpam:
     def __init__(self, bot):
         self.bot = bot
-        self.log_ch = 1478490523592560681  # 超かぐや姫！ファンサーバー server-log
+        self.log_ch = 1484528280173547582  # 超かぐや姫！ファンサーバー yachiyo-log
         self.normalRole = 1473305169310515425  # 雑談ロール
         self.muteRole = 1478580818954686524  # おいたはダメだよ～ロール
 
