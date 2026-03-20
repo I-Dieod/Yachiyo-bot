@@ -331,44 +331,96 @@ class StageEvent(commands.Cog):
         - applied_period が今日のレコード → ロールを付与
         - applied_period が今日より前のレコード → ロールを除去してDBから削除
         """
-        today = date.today()
+        import logging
+        from datetime import timedelta, timezone
+
+        logger = logging.getLogger(__name__)
+
+        JST = timezone(timedelta(hours=9))
+        today = datetime.now(JST).date()
+        logger.error(f"[check_role_schedule] 発火: today(JST)={today}")
+
         guild = discord.utils.get(self.bot.guilds)
         if guild is None:
+            logger.error("[check_role_schedule] guild が None のため終了")
             return
 
         role = guild.get_role(APPLY_ROLE_ID)
         if role is None:
+            logger.error(
+                f"[check_role_schedule] APPLY_ROLE_ID={APPLY_ROLE_ID} のロールが見つからないため終了"
+            )
             return
 
         # 当日分: ロールを付与（未付与の場合のみ）
-        due_records = await db_manager.get_due_records(today)
+        try:
+            due_records = await db_manager.get_due_records(today)
+            logger.error(
+                f"[check_role_schedule] 当日対象レコード数: {len(due_records)}"
+            )
+        except Exception as e:
+            logger.error(f"[check_role_schedule] get_due_records 失敗: {e}")
+            return
+
         for record in due_records:
             member = guild.get_member(record["user_id"])
             if member is None:
+                logger.error(
+                    f"[check_role_schedule] user_id={record['user_id']} がギルドに見つからない（当日分）"
+                )
                 continue
             if role not in member.roles:
                 try:
                     await member.add_roles(role)
+                    logger.error(
+                        f"[check_role_schedule] ロール付与成功: {member} (user_id={record['user_id']})"
+                    )
                 except discord.Forbidden:
-                    pass
+                    logger.error(f"[check_role_schedule] ロール付与権限なし: {member}")
+            else:
+                logger.error(
+                    f"[check_role_schedule] 既にロール所持のためスキップ: {member}"
+                )
 
         # 期限切れ分（< today）: ロールを除去してDBから削除
-        expired_records = await db_manager.get_due_records_before(today)
+        try:
+            expired_records = await db_manager.get_due_records_before(today)
+            logger.error(
+                f"[check_role_schedule] 期限切れ対象レコード数: {len(expired_records)}"
+            )
+        except Exception as e:
+            logger.error(f"[check_role_schedule] get_due_records_before 失敗: {e}")
+            return
+
         for record in expired_records:
             member = guild.get_member(record["user_id"])
             if member is not None and role in member.roles:
                 try:
                     await member.remove_roles(role)
+                    logger.error(
+                        f"[check_role_schedule] ロール除去成功: {member} (user_id={record['user_id']})"
+                    )
                 except discord.Forbidden:
-                    pass
-        await db_manager.delete_expired_records(today)
+                    logger.error(f"[check_role_schedule] ロール除去権限なし: {member}")
+            else:
+                logger.error(
+                    f"[check_role_schedule] ロール除去スキップ: member={member}, user_id={record['user_id']}"
+                )
+
+        try:
+            deleted = await db_manager.delete_expired_records(today)
+            logger.error(f"[check_role_schedule] DB削除完了: {deleted} 件")
+        except Exception as e:
+            logger.error(f"[check_role_schedule] delete_expired_records 失敗: {e}")
 
     @check_role_schedule.before_loop
     async def before_check_role_schedule(self):
         """ボット起動完了を待ち、次の0時(JST)まで待機してからループを開始する"""
         import asyncio
+        import logging
         from datetime import timedelta, timezone
 
+        logger = logging.getLogger(__name__)
         await self.bot.wait_until_ready()
 
         JST = timezone(timedelta(hours=9))
@@ -377,6 +429,9 @@ class StageEvent(commands.Cog):
             hour=0, minute=0, second=0, microsecond=0
         )
         wait_seconds = (next_midnight - now).total_seconds()
+        logger.error(
+            f"[before_check_role_schedule] 次の0時(JST)まで {wait_seconds:.0f}秒 待機: next_midnight={next_midnight}"
+        )
         await asyncio.sleep(wait_seconds)
 
     @commands.command()
