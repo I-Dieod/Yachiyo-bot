@@ -16,9 +16,10 @@ mute_name_list = ["荒らし共栄圏", "荒らし", "共栄圏", "ワッパス�
 pattern1 = r"[\w-]{20,28}\.[\w-]{3,10}\.[\w-]{22,30}"
 pattern2 = r"mfa\.[\w-]{80,90}"
 pattern3 = r"[a-zA-Z0-9]{15}"
-log_ch = 1484528280173547582  # 超かぐや姫！ファンサーバー yachiyo-log
-normalRole = 1473305169310515425  # 雑談ロール
-muteRole = 1478580818954686524  # おいたはダメだよ～ロール
+
+LOG_CH = 1484528280173547582  # 超かぐや姫！ファンサーバー yachiyo-log
+NORMAL_ROLE = 1473305169310515425  # 雑談ロール
+MUTE_ROLE = 1478580818954686524  # おいたはダメだよ～ロール
 
 
 class Security(commands.Cog):
@@ -51,8 +52,8 @@ class Security(commands.Cog):
             logger.error(f"Failed to close database connection: {e}")
 
     async def give_mute(self, member: discord.Member):
-        role_Normal = member.guild.get_roles(normalRole)
-        role_Mute = member.guild.get_role(muteRole)  # おいたはダメだよ〜
+        role_Normal = member.guild.get_roles(NORMAL_ROLE)
+        role_Mute = member.guild.get_role(MUTE_ROLE)  # おいたはダメだよ〜
         await member.add_roles(role_Mute)
         await member.remove_roles(role_Normal)
 
@@ -74,12 +75,12 @@ class Security(commands.Cog):
             logger.error(f"Failed to save user join to database: {e}")
 
         name = member.global_name or member.display_name
-        ch = self.bot.get_channel(log_ch)
+        ch = self.bot.get_channel(LOG_CH)
 
         # 危険ユーザーミュート処理
         for target in mute_name_list:
             if target in name:
-                role = member.guild.get_role(muteRole)  # おいたはダメだよ〜
+                role = member.guild.get_role(MUTE_ROLE)  # おいたはダメだよ〜
                 await member.add_roles(role)
                 if ch:
                     await ch.send(
@@ -111,7 +112,7 @@ class Security(commands.Cog):
             msg_c_id = ctx.channel.id
             msg_c_name = ctx.channel.name
 
-            ch = self.bot.get_channel(log_ch)
+            ch = self.bot.get_channel(LOG_CH)
             await ch.send(f"<@{m_author}> がトークンメッセージを送信しました。\n")
             await ch.send(f"発生場所:{msg_c_name}(id: {msg_c_id})")
 

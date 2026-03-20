@@ -3,13 +3,17 @@ from difflib import SequenceMatcher
 
 import discord
 
+LOG_CH = 1484528280173547582  # 超かぐや姫！ファンサーバー yachiyo-log
+NORMAL_ROLE = 1473305169310515425  # 雑談ロール
+MUTE_ROLE = 1478580818954686524  # おいたはダメだよ～ロール
+
 
 class CheckDiffSpam:
     def __init__(self, bot):
         self.bot = bot
-        self.log_ch = 1484528280173547582  # 超かぐや姫！ファンサーバー yachiyo-log
-        self.normalRole = 1473305169310515425  # 雑談ロール
-        self.muteRole = 1478580818954686524  # おいたはダメだよ～ロール
+        self.log_ch = LOG_CH
+        self.normalRole = NORMAL_ROLE
+        self.muteRole = MUTE_ROLE
 
         self.detect_len = 200
         self.MIN_NORMALIZED_LENGTH = 10  # 正規化後最低10文字以上
