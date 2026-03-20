@@ -1,7 +1,7 @@
 import discord
 from discord.ext import commands
 
-log_ch = 1478490523592560681  # 超かぐや姫！ファンサーバー server-log
+log_ch = 1484528280173547582  # 超かぐや姫！ファンサーバー yachiyo-log
 
 
 class Event(commands.Cog):
