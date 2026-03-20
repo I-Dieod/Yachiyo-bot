@@ -1,5 +1,5 @@
 import logging
-from datetime import date, datetime
+from datetime import date
 from typing import List
 
 import asyncpg
@@ -12,7 +12,7 @@ async def save_applied_period(
     user_id: int,
     username: str,
     display_name: str,
-    applied_date: datetime,
+    applied_date: date,
 ):
     """申請情報をデータベースに保存"""
     query = """
@@ -25,7 +25,7 @@ async def save_applied_period(
             result = await connection.fetchval(
                 query, user_id, username, display_name, applied_date
             )
-            logger.info(f"Stage cordinate apply saved: user_id={user_id}")
+            logger.info(f"Stage coordinate apply saved: user_id={user_id}")
             return result
         except Exception as e:
             logger.error(f"Failed to save apply: {e}")
@@ -36,10 +36,10 @@ async def get_due_records(
     pool: asyncpg.Pool,
     today: date,
 ) -> List[asyncpg.Record]:
-    """applied_period の日付部分が today と一致するレコードを全件取得して返す"""
+    """applied_period が today と一致するレコードを全件取得して返す"""
     query = """
     SELECT * FROM apply_stage_coordinate
-    WHERE DATE(applied_period) = $1;
+    WHERE applied_period = $1;
     """
     async with pool.acquire() as connection:
         try:
@@ -57,10 +57,10 @@ async def get_records_before(
     pool: asyncpg.Pool,
     today: date,
 ) -> List[asyncpg.Record]:
-    """applied_period の日付部分が today より前のレコードを全件取得して返す"""
+    """applied_period が today より前のレコードを全件取得して返す"""
     query = """
     SELECT * FROM apply_stage_coordinate
-    WHERE DATE(applied_period) < $1;
+    WHERE applied_period < $1;
     """
     async with pool.acquire() as connection:
         try:
@@ -78,10 +78,10 @@ async def delete_expired_records(
     pool: asyncpg.Pool,
     today: date,
 ) -> int:
-    """applied_period の日付部分が today より前のレコードを全件削除し、削除件数を返す"""
+    """applied_period が today より前のレコードを全件削除し、削除件数を返す"""
     query = """
     DELETE FROM apply_stage_coordinate
-    WHERE DATE(applied_period) < $1;
+    WHERE applied_period < $1;
     """
     async with pool.acquire() as connection:
         try:
