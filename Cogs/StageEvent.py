@@ -1,4 +1,6 @@
-from datetime import date, datetime
+import asyncio
+import logging
+from datetime import date, datetime, timedelta, timezone
 from typing import Optional, Union
 
 import discord
@@ -6,6 +8,9 @@ from discord.ext import commands, tasks
 from discord.ui import Button, Modal, TextInput, View
 
 from data.client import db_manager
+
+JST = timezone(timedelta(hours=9))
+logger = logging.getLogger(__name__)
 
 # 審査チャンネルのID
 REVIEW_CHANNEL_ID = 1483869724482998383  # ステージコーディネート申請
@@ -115,10 +120,8 @@ class ReviewView(View):
             )
             return
 
-        applied_date = datetime.strptime(self.period, "%Y/%m/%d")
-        today = interaction.created_at.replace(
-            hour=0, minute=0, second=0, microsecond=0, tzinfo=None
-        )
+        applied_date = datetime.strptime(self.period, "%Y/%m/%d").date()
+        today_jst = interaction.created_at.astimezone(JST).date()
 
         try:
             await db_manager.save_applied_period(
@@ -127,8 +130,8 @@ class ReviewView(View):
                 self.applicant.display_name,
                 applied_date,
             )
-            # 申請日が当日であれば即時付与
-            if applied_date == today:
+            # 申請日が当日（JST）であれば即時付与
+            if applied_date == today_jst:
                 await self.applicant.add_roles(role)
         except discord.Forbidden:
             await interaction.response.send_message(
@@ -331,23 +334,17 @@ class StageEvent(commands.Cog):
         - applied_period が今日のレコード → ロールを付与
         - applied_period が今日より前のレコード → ロールを除去してDBから削除
         """
-        import logging
-        from datetime import timedelta, timezone
-
-        logger = logging.getLogger(__name__)
-
-        JST = timezone(timedelta(hours=9))
         today = datetime.now(JST).date()
-        logger.error(f"[check_role_schedule] 発火: today(JST)={today}")
+        logger.info(f"[check_role_schedule] 発火: today(JST)={today}")
 
         guild = discord.utils.get(self.bot.guilds)
         if guild is None:
-            logger.error("[check_role_schedule] guild が None のため終了")
+            logger.warning("[check_role_schedule] guild が None のため終了")
             return
 
         role = guild.get_role(APPLY_ROLE_ID)
         if role is None:
-            logger.error(
+            logger.warning(
                 f"[check_role_schedule] APPLY_ROLE_ID={APPLY_ROLE_ID} のロールが見つからないため終了"
             )
             return
@@ -355,9 +352,7 @@ class StageEvent(commands.Cog):
         # 当日分: ロールを付与（未付与の場合のみ）
         try:
             due_records = await db_manager.get_due_records(today)
-            logger.error(
-                f"[check_role_schedule] 当日対象レコード数: {len(due_records)}"
-            )
+            logger.info(f"[check_role_schedule] 当日対象レコード数: {len(due_records)}")
         except Exception as e:
             logger.error(f"[check_role_schedule] get_due_records 失敗: {e}")
             return
@@ -365,27 +360,25 @@ class StageEvent(commands.Cog):
         for record in due_records:
             member = guild.get_member(record["user_id"])
             if member is None:
-                logger.error(
+                logger.warning(
                     f"[check_role_schedule] user_id={record['user_id']} がギルドに見つからない（当日分）"
                 )
                 continue
             if role not in member.roles:
                 try:
                     await member.add_roles(role)
-                    logger.error(
-                        f"[check_role_schedule] ロール付与成功: {member} (user_id={record['user_id']})"
-                    )
+                    logger.info(f"[check_role_schedule] ロール付与成功: {member}")
                 except discord.Forbidden:
                     logger.error(f"[check_role_schedule] ロール付与権限なし: {member}")
             else:
-                logger.error(
+                logger.info(
                     f"[check_role_schedule] 既にロール所持のためスキップ: {member}"
                 )
 
         # 期限切れ分（< today）: ロールを除去してDBから削除
         try:
             expired_records = await db_manager.get_due_records_before(today)
-            logger.error(
+            logger.info(
                 f"[check_role_schedule] 期限切れ対象レコード数: {len(expired_records)}"
             )
         except Exception as e:
@@ -397,40 +390,32 @@ class StageEvent(commands.Cog):
             if member is not None and role in member.roles:
                 try:
                     await member.remove_roles(role)
-                    logger.error(
-                        f"[check_role_schedule] ロール除去成功: {member} (user_id={record['user_id']})"
-                    )
+                    logger.info(f"[check_role_schedule] ロール除去成功: {member}")
                 except discord.Forbidden:
                     logger.error(f"[check_role_schedule] ロール除去権限なし: {member}")
             else:
-                logger.error(
+                logger.info(
                     f"[check_role_schedule] ロール除去スキップ: member={member}, user_id={record['user_id']}"
                 )
 
         try:
             deleted = await db_manager.delete_expired_records(today)
-            logger.error(f"[check_role_schedule] DB削除完了: {deleted} 件")
+            logger.info(f"[check_role_schedule] DB削除完了: {deleted} 件")
         except Exception as e:
             logger.error(f"[check_role_schedule] delete_expired_records 失敗: {e}")
 
     @check_role_schedule.before_loop
     async def before_check_role_schedule(self):
         """ボット起動完了を待ち、次の0時(JST)まで待機してからループを開始する"""
-        import asyncio
-        import logging
-        from datetime import timedelta, timezone
-
-        logger = logging.getLogger(__name__)
         await self.bot.wait_until_ready()
 
-        JST = timezone(timedelta(hours=9))
         now = datetime.now(JST)
         next_midnight = (now + timedelta(days=1)).replace(
             hour=0, minute=0, second=0, microsecond=0
         )
         wait_seconds = (next_midnight - now).total_seconds()
-        logger.error(
-            f"[before_check_role_schedule] 次の0時(JST)まで {wait_seconds:.0f}秒 待機: next_midnight={next_midnight}"
+        logger.info(
+            f"[before_check_role_schedule] 次の0時(JST)まで {wait_seconds:.0f}秒 待機"
         )
         await asyncio.sleep(wait_seconds)
 
