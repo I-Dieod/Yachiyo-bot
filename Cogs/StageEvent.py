@@ -393,12 +393,19 @@ class StageEvent(commands.Cog):
         today = datetime.now(JST).date()
         logger.info(f"[check_role_schedule] 発火: today(JST)={today}")
 
-        guild = discord.utils.get(self.bot.guilds)
-        if guild is None:
-            logger.warning("[check_role_schedule] guild が None のため終了")
+        if not self.bot.guilds:
+            logger.warning("[check_role_schedule] bot.guilds が空のため終了")
+            return
+        guild = self.bot.guilds[0]
+
+        try:
+            # キャッシュが不完全な場合に備え fetch_guild でロール情報を確実に取得
+            fetched_guild = await self.bot.fetch_guild(guild.id)
+        except discord.HTTPException as e:
+            logger.error(f"[check_role_schedule] fetch_guild 失敗: {e}")
             return
 
-        role = guild.get_role(APPLY_ROLE_ID)
+        role = fetched_guild.get_role(APPLY_ROLE_ID)
         if role is None:
             logger.warning(
                 f"[check_role_schedule] APPLY_ROLE_ID={APPLY_ROLE_ID} のロールが見つからないため終了"
