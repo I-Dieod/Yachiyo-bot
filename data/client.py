@@ -80,6 +80,14 @@ class DatabaseManager:
             applied_period TIMESTAMP
         );
 
+        CREATE TABLE IF NOT EXISTS stage_review_messages (
+            message_id   BIGINT PRIMARY KEY,
+            applicant_id BIGINT NOT NULL,
+            reason       TEXT NOT NULL,
+            period       DATE NOT NULL,
+            created_at   TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+        );
+
         CREATE TABLE IF NOT EXISTS fuju_users (
             id SERIAL PRIMARY KEY,
             user_id BIGINT NOT NULL,
@@ -212,6 +220,30 @@ class DatabaseManager:
     async def delete_expired_records(self, today: date) -> int:
         """applied_period が today より前のレコードを削除"""
         return await _stage_event.delete_expired_records(self.pool, today)
+
+    async def save_review_message(
+        self,
+        message_id: int,
+        applicant_id: int,
+        reason: str,
+        period: date,
+    ) -> None:
+        """審査メッセージのIDと申請情報を保存"""
+        return await _stage_event.save_review_message(
+            self.pool, message_id, applicant_id, reason, period
+        )
+
+    async def get_review_message(self, message_id: int):
+        """message_id に対応する審査メッセージレコードを取得"""
+        return await _stage_event.get_review_message(self.pool, message_id)
+
+    async def delete_review_message(self, message_id: int) -> None:
+        """message_id に対応する審査メッセージレコードを削除"""
+        return await _stage_event.delete_review_message(self.pool, message_id)
+
+    async def get_all_review_messages(self) -> list:
+        """全審査メッセージレコードを取得（起動時のView復元用）"""
+        return await _stage_event.get_all_review_messages(self.pool)
 
 
 # グローバルなデータベースマネージャーインスタンス
