@@ -65,7 +65,7 @@ def _build_application_embed(
 
 
 def _build_reviewed_embed(
-    applicant: discord.Member,
+    applicant: Union[discord.Member, discord.User],
     reason: str,
     period: str,
     reviewer: Union[discord.Member, discord.User],
@@ -96,11 +96,8 @@ def _build_reviewed_embed(
 class ReviewView(View):
     """申請審査用のView（許可・却下ボタン）"""
 
-    def __init__(self, applicant: discord.Member, reason: str, period: str):
+    def __init__(self):
         super().__init__(timeout=None)
-        self.applicant = applicant
-        self.reason = reason
-        self.period = period
 
     @discord.ui.button(
         label="✅ 許可", style=discord.ButtonStyle.success, custom_id="review_approve"
@@ -120,19 +117,41 @@ class ReviewView(View):
             )
             return
 
-        applied_date = datetime.strptime(self.period, "%Y/%m/%d").date()
+        # DBから申請情報を復元
+        if interaction.message is None:
+            await interaction.response.send_message(
+                "❌ メッセージ情報が取得できませんでした。", ephemeral=True
+            )
+            return
+        record = await db_manager.get_review_message(interaction.message.id)
+        if record is None:
+            await interaction.response.send_message(
+                "❌ 申請情報が見つかりませんでした。", ephemeral=True
+            )
+            return
+
+        applicant = interaction.guild.get_member(record["applicant_id"])
+        if applicant is None:
+            await interaction.response.send_message(
+                "❌ 申請者がサーバーに見つかりませんでした。", ephemeral=True
+            )
+            return
+
+        reason: str = record["reason"]
+        period: date = record["period"]
+        period_str = period.strftime("%Y/%m/%d")
         today_jst = interaction.created_at.astimezone(JST).date()
 
         try:
             await db_manager.save_applied_period(
-                self.applicant.id,
-                self.applicant.name,
-                self.applicant.display_name,
-                applied_date,
+                applicant.id,
+                applicant.name,
+                applicant.display_name,
+                period,
             )
             # 申請日が当日（JST）であれば即時付与
-            if applied_date == today_jst:
-                await self.applicant.add_roles(role)
+            if period == today_jst:
+                await applicant.add_roles(role)
         except discord.Forbidden:
             await interaction.response.send_message(
                 "❌ ロール付与の権限がありません。", ephemeral=True
@@ -144,15 +163,18 @@ class ReviewView(View):
             )
             return
 
+        # 審査メッセージレコードを削除
+        await db_manager.delete_review_message(interaction.message.id)  # type: ignore[union-attr]
+
         # 申請者にDMで通知
         try:
-            await self.applicant.send(
+            await applicant.send(
                 embed=discord.Embed(
                     title="✅ ロール申請が許可されました",
                     description=(
                         f"**{role.name}** のロール申請が承認されました！\n\n"
-                        f"📝 申請理由: {self.reason}\n"
-                        f"📅 申請日: {self.period}"
+                        f"📝 申請理由: {reason}\n"
+                        f"📅 申請日: {period_str}"
                     ),
                     color=discord.Color.green(),
                 )
@@ -161,9 +183,9 @@ class ReviewView(View):
             pass  # DMが送れない場合はスキップ
 
         approved_embed = _build_reviewed_embed(
-            applicant=self.applicant,
-            reason=self.reason,
-            period=self.period,
+            applicant=applicant,
+            reason=reason,
+            period=period_str,
             reviewer=interaction.user,
             approved=True,
         )
@@ -175,27 +197,57 @@ class ReviewView(View):
     async def reject(self, interaction: discord.Interaction, button: Button):
         """ロール付与を却下する"""
 
+        # DBから申請情報を復元
+        if interaction.message is None:
+            await interaction.response.send_message(
+                "❌ メッセージ情報が取得できませんでした。", ephemeral=True
+            )
+            return
+        record = await db_manager.get_review_message(interaction.message.id)
+        if record is None:
+            await interaction.response.send_message(
+                "❌ 申請情報が見つかりませんでした。", ephemeral=True
+            )
+            return
+
+        if interaction.guild is None:
+            await interaction.response.send_message(
+                "❌ サーバー内でのみ使用できます。", ephemeral=True
+            )
+            return
+
+        applicant = interaction.guild.get_member(record["applicant_id"])
+        reason: str = record["reason"]
+        period: date = record["period"]
+        period_str = period.strftime("%Y/%m/%d")
+
+        # 審査メッセージレコードを削除
+        await db_manager.delete_review_message(interaction.message.id)  # type: ignore[union-attr]
+
         # 申請者にDMで通知
         try:
-            await self.applicant.send(
-                embed=discord.Embed(
-                    title="❌ ロール申請が却下されました",
-                    description=(
-                        "ステージコーディネーターのロール申請は却下されました。\n\n"
-                        f"📝 申請理由: {self.reason}\n"
-                        f"📅 申請日: {self.period}\n\n"
-                        "詳細については管理者にお問い合わせください。"
-                    ),
-                    color=discord.Color.red(),
+            if applicant is not None:
+                await applicant.send(
+                    embed=discord.Embed(
+                        title="❌ ロール申請が却下されました",
+                        description=(
+                            "ステージコーディネーターのロール申請は却下されました。\n\n"
+                            f"📝 申請理由: {reason}\n"
+                            f"📅 申請日: {period_str}\n\n"
+                            "詳細については管理者にお問い合わせください。"
+                        ),
+                        color=discord.Color.red(),
+                    )
                 )
-            )
         except discord.Forbidden:
             pass  # DMが送れない場合はスキップ
 
+        # applicant が None の場合でも Embed は表示できるようダミーを用意
+        dummy_applicant = applicant or interaction.user
         rejected_embed = _build_reviewed_embed(
-            applicant=self.applicant,
-            reason=self.reason,
-            period=self.period,
+            applicant=dummy_applicant,
+            reason=reason,
+            period=period_str,
             reviewer=interaction.user,
             approved=False,
         )
@@ -289,12 +341,16 @@ class ApplicationModal(Modal, title="ステージコーディネーター申請"
             reason=self.reason.value,
             period=normalized_period,
         )
-        view = ReviewView(
-            applicant=member,
-            reason=self.reason.value,
-            period=normalized_period,
+        view = ReviewView()
+        msg = await review_channel.send(embed=embed, view=view)
+
+        # 審査メッセージをDBに保存
+        await db_manager.save_review_message(
+            msg.id,
+            member.id,
+            self.reason.value,
+            datetime.strptime(normalized_period, "%Y/%m/%d").date(),
         )
-        await review_channel.send(embed=embed, view=view)
 
         # 申請者に受付完了を通知（ephemeral）
         await interaction.response.send_message(
@@ -420,7 +476,7 @@ class StageEvent(commands.Cog):
         await asyncio.sleep(wait_seconds)
 
     @commands.command()
-    async def role(self, ctx: commands.Context):
+    async def stage_apply(self, ctx: commands.Context):
         embed = discord.Embed(
             title="ステージコーディネーター申請🎙️",
             description=(
@@ -433,5 +489,14 @@ class StageEvent(commands.Cog):
 
 
 async def setup(bot: commands.Bot):
+    # 起動時に審査待ちの ReviewView を復元
+    records = await db_manager.get_all_review_messages()
+    for record in records:
+        bot.add_view(ReviewView(), message_id=record["message_id"])
+    logger.info(f"ReviewView restored for {len(records)} message(s)")
+
+    # ApplyView も永続化
+    bot.add_view(ApplyView())
+
     await bot.add_cog(StageEvent(bot))
     print("StageEvent cog loaded successfully.")
