@@ -20,7 +20,6 @@ INITIAL_EXTENSIONS = [
     "Cogs.Events",
     "Cogs.Security",
     "Cogs.Talk",
-    "Cogs.StageEvent",
 ]
 
 
