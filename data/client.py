@@ -194,6 +194,7 @@ class DatabaseManager:
         return await _user_join.delete_expired_joins(self.pool)
 
     # --- stage_event wrappers ---
+    """
     async def save_applied_period(
         self,
         user_id: int,
@@ -210,15 +211,15 @@ class DatabaseManager:
         )
 
     async def get_due_records(self, today: date) -> list:
-        """applied_period が today と一致するレコードを取得"""
+        # applied_period が today と一致するレコードを取得
         return await _stage_event.get_due_records(self.pool, today)
 
     async def get_due_records_before(self, today: date) -> list:
-        """applied_period が today より前のレコードを取得"""
+        # applied_period が today より前のレコードを取得
         return await _stage_event.get_records_before(self.pool, today)
 
     async def delete_expired_records(self, today: date) -> int:
-        """applied_period が today より前のレコードを削除"""
+        # applied_period が today より前のレコードを削除
         return await _stage_event.delete_expired_records(self.pool, today)
 
     async def save_review_message(
@@ -228,22 +229,23 @@ class DatabaseManager:
         reason: str,
         period: date,
     ) -> None:
-        """審査メッセージのIDと申請情報を保存"""
+        # 審査メッセージのIDと申請情報を保存
         return await _stage_event.save_review_message(
             self.pool, message_id, applicant_id, reason, period
         )
 
     async def get_review_message(self, message_id: int):
-        """message_id に対応する審査メッセージレコードを取得"""
+        # message_id に対応する審査メッセージレコードを取得
         return await _stage_event.get_review_message(self.pool, message_id)
 
     async def delete_review_message(self, message_id: int) -> None:
-        """message_id に対応する審査メッセージレコードを削除"""
+        # message_id に対応する審査メッセージレコードを削除
         return await _stage_event.delete_review_message(self.pool, message_id)
 
     async def get_all_review_messages(self) -> list:
-        """全審査メッセージレコードを取得（起動時のView復元用）"""
+        # 全審査メッセージレコードを取得（起動時のView復元用
         return await _stage_event.get_all_review_messages(self.pool)
+    """
 
 
 # グローバルなデータベースマネージャーインスタンス
