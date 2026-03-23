@@ -19,6 +19,14 @@ class CheckDiffSpam:
         self.MIN_NORMALIZED_LENGTH = 10  # 正規化後最低10文字以上
         # サイリウム絵文字パターン（色名部分を柔軟に）
         self.CYALUME_EMOJI_PATTERN = r"<:cyalume_light\d+_[a-zA-Z]+:\d+>"
+        # 類似度計算・スパム検出から除外するURLパターン（エスケープリスト）
+        self.ESCAPE_URL_PATTERNS = [
+            r"https?://(?:www\.)?x\.com/\S*",
+            r"https?://(?:www\.)?twitter\.com/\S*",
+            r"https?://(?:www\.)?fxtwitter\.com/\S*",
+            r"https?://(?:www\.)?vxtwitter\.com/\S*",
+            r"https?://(?:www\.)?fixupx\.com/\S*",
+        ]
 
         # チャンネルベースの監視システム
         self.monitoring_channels = set()  # 監視中のチャンネルID
@@ -59,11 +67,22 @@ class CheckDiffSpam:
         # cyalume_light系絵文字を除去
         normalized = re.sub(self.CYALUME_EMOJI_PATTERN, "", text)
 
+        # エスケープ対象URLを除去（x.com / fxtwitter.com 等）
+        for url_pat in self.ESCAPE_URL_PATTERNS:
+            normalized = re.sub(url_pat, "", normalized)
+
         # 連続する空白を単一の空白に統一
         normalized = re.sub(r"\s+", " ", normalized)
 
         # 前後の空白を除去
         return normalized.strip()
+
+    def contains_only_escaped_urls(self, text):
+        """テキストがエスケープ対象URLのみで構成されている場合 True を返す"""
+        stripped = text
+        for url_pat in self.ESCAPE_URL_PATTERNS:
+            stripped = re.sub(url_pat, "", stripped)
+        return stripped.strip() == ""
 
     def calculate_similarity(self, text1, text2):
         """2つのテキストの類似度を計算（0.0-1.0）- 絵文字を正規化して比較"""
@@ -157,9 +176,12 @@ class CheckDiffSpam:
 
                 similarity = 0.0  # 初期化
                 # 正規化後のメッセージが両方とも有効な内容を持つ場合のみ類似度計算
+                # エスケープ対象URLのみのメッセージはスパム判定をスキップ
                 if (
                     len(norm_current_message.strip()) >= self.MIN_NORMALIZED_LENGTH
                     and len(norm_old_message.strip()) >= self.MIN_NORMALIZED_LENGTH
+                    and not self.contains_only_escaped_urls(current_message)
+                    and not self.contains_only_escaped_urls(old_message)
                 ):
                     similarity = self.calculate_similarity(
                         norm_current_message, norm_old_message
