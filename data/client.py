@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Optional
 
 import asyncpg
 
-from . import stage_event as _stage_event
+# from . import stage_event as _stage_event
 from . import user_join as _user_join
 
 logger = logging.getLogger(__name__)
